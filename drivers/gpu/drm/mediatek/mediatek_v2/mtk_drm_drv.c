@@ -751,25 +751,19 @@ static void mtk_atomic_doze_update_dsi_state(struct drm_device *dev,
 
 	if (mtk_state->doze_changed && priv->data->doze_ctrl_pmic) {
 		if (mtk_state->prop_val[CRTC_PROP_DOZE_ACTIVE] && prepare) {
+			DDPMSG("enter AOD, disable PMIC LPMODE\n");
 			if ((aod_scp_flag) && (aod_scp_ipi.send_ipi)) {
 				aod_scp_ipi.send_ipi(0);
 				DDPMSG("mtk_aod_scp_ipi_send sent IPI to SCP done\n");
 				mdelay(10000);
 				}
-			if (priv->panel_power_src_vio18) {
-				DDPMSG("enter AOD, disable PMIC LPMODE\n");
-				//pmic_ldo_vio18_lp(SRCLKEN0, 0, 1, HW_LP);
-				//pmic_ldo_vio18_lp(SRCLKEN2, 0, 1, HW_LP);
-				clk_buf_voter_ctrl_by_id(12, SW_LPM);
-			}
+			//pmic_ldo_vio18_lp(SRCLKEN0, 0, 1, HW_LP);
+			//pmic_ldo_vio18_lp(SRCLKEN2, 0, 1, HW_LP);
 		} else if (!mtk_state->prop_val[CRTC_PROP_DOZE_ACTIVE]
 				&& !prepare) {
-			if (priv->panel_power_src_vio18) {
-				DDPMSG("exit AOD, enable PMIC LPMODE\n");
-				//pmic_ldo_vio18_lp(SRCLKEN0, 1, 1, HW_LP);
-				//pmic_ldo_vio18_lp(SRCLKEN2, 1, 1, HW_LP);
-				clk_buf_voter_ctrl_by_id(12, SW_OFF);
-			}
+			DDPMSG("exit AOD, enable PMIC LPMODE\n");
+			//pmic_ldo_vio18_lp(SRCLKEN0, 1, 1, HW_LP);
+			//pmic_ldo_vio18_lp(SRCLKEN2, 1, 1, HW_LP);
 		}
 	}
 	if (!mtk_state->doze_changed ||
