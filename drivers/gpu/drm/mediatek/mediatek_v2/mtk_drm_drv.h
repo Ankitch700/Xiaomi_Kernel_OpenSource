@@ -113,6 +113,7 @@ struct mtk_drm_private {
 	struct device_node *comp_node[DDP_COMPONENT_ID_MAX];
 	struct mtk_ddp_comp *ddp_comp[DDP_COMPONENT_ID_MAX];
 	const struct mtk_mmsys_driver_data *data;
+	unsigned int panel_power_src_vio18;
 
 	struct {
 		struct drm_atomic_state *state;

@@ -2926,6 +2926,8 @@ static int mtk_dsi_create_conn_enc(struct drm_device *drm, struct mtk_dsi *dsi)
 {
 	int ret;
 	struct mtk_ddp_comp *comp = &dsi->ddp_comp;
+	struct mtk_drm_private *priv;
+	unsigned int vio18 = 0;
 
 	ret = drm_encoder_init(drm, &dsi->encoder, &mtk_dsi_encoder_funcs,
 			       DRM_MODE_ENCODER_DSI, NULL);
@@ -2939,6 +2941,9 @@ static int mtk_dsi_create_conn_enc(struct drm_device *drm, struct mtk_dsi *dsi)
 	 * Currently display data paths are statically assigned to a crtc each.
 	 * crtc 0 is OVL0 -> COLOR0 -> AAL -> OD -> RDMA0 -> UFOE -> DSI0
 	 */
+	if (of_property_read_u32(dsi->dev->of_node, "power_source_from_vio18", &vio18))
+		vio18 = 0;
+
 	if (comp && comp->id == DDP_COMPONENT_DSI0)
 		dsi->encoder.possible_crtcs = BIT(0);
 	else
@@ -2951,6 +2956,12 @@ static int mtk_dsi_create_conn_enc(struct drm_device *drm, struct mtk_dsi *dsi)
 		ret = mtk_dsi_create_connector(drm, dsi);
 		if (ret)
 			goto err_encoder_cleanup;
+	}
+
+	/* record if there exist any encoder's panel require vio18 power domain */
+	if (drm && drm->dev_private) {
+		priv = drm->dev_private;
+		priv->panel_power_src_vio18 |= !!vio18;
 	}
 
 	return 0;
