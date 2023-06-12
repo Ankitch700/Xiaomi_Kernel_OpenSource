@@ -1894,6 +1894,14 @@ static void config_eint_init_by_mode(void)
 				ACCDET_EINT0_PWM_EN_SFT);
 		accdet_update_bit(ACCDET_EINT0_PWM_IDLE_ADDR,
 				ACCDET_EINT0_PWM_IDLE_SFT);
+		/* For normal mode, select VTH to 2v and 500k, use internal resitance,
+		 * 239E bit[10][11][12] = 1
+		 */
+		accdet_write(RG_AUDACCDETMICBIAS0PULLLOW_ADDR,
+			accdet_read(RG_AUDACCDETMICBIAS0PULLLOW_ADDR) | 0x1C00);
+		pr_info("%s: register 0x%x=0x%x", __func__,
+			RG_AUDACCDETMICBIAS0PULLLOW_ADDR,
+			accdet_read(RG_AUDACCDETMICBIAS0PULLLOW_ADDR));
 	} else if (HAS_CAP(accdet->data->caps, ACCDET_PMIC_EINT1)) {
 		accdet_update_bits(ACCDET_EINT0_PWM_THRESH_ADDR, 0x8, 0x6, 0x6);
 		accdet_update_bits(ACCDET_EINT0_PWM_WIDTH_ADDR, 0xc, 0x2, 0x2);
