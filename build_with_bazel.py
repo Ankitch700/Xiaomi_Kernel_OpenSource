@@ -288,6 +288,15 @@ class BazelBuilder:
             "--ignore_missing_projects",
         ])
 
+        factory_build = os.environ.get('FACTORY_BUILD')
+        logging.info("--define=FACTORY_BUILD=%s", factory_build)
+        CURRENT_ANTI_ROLLBACK = os.environ.get('CURRENT_ANTI_ROLLBACK')
+        logging.info("--define=CURRENT_ANTI_ROLLBACK=%s", CURRENT_ANTI_ROLLBACK)
+        self.user_opts.extend([
+            "--define=FACTORY_BUILD={}".format(factory_build),
+            "--define=CURRENT_ANTI_ROLLBACK={}".format(CURRENT_ANTI_ROLLBACK),
+        ])
+
         if self.dry_run:
             self.user_opts.append("--nobuild")
 

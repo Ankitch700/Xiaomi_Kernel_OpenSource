@@ -507,6 +507,7 @@ struct cpu_freq_info {
 	unsigned int max_cpu_scale_freq;
 };
 
+
 struct ufs_qcom_host {
 	/*
 	 * Set this capability if host controller supports the QUniPro mode

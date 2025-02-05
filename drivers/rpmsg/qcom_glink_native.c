@@ -1542,7 +1542,7 @@ static int qcom_glink_native_rx(struct qcom_glink *glink, int iterations)
 	spin_lock_irqsave(&glink->irq_lock, flags);
 	if (glink->irq_running) {
 		spin_unlock_irqrestore(&glink->irq_lock, flags);
-		return 0;
+		return IRQ_WAKE_THREAD; //return 0;/*modify by lihui for CR3854709 20240726*/
 	}
 	glink->irq_running = true;
 	spin_unlock_irqrestore(&glink->irq_lock, flags);

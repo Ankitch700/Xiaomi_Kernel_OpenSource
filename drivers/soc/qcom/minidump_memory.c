@@ -40,6 +40,16 @@ static unsigned long *md_debug_max_pfn;
 #define DMA_BUF_HASH_SEED 0x9747b28c
 static bool dma_buf_hash[DMA_BUF_HASH_SIZE];
 
+int error = 0;
+#define MD_DEBUG_LOOKUP(_var, type) \
+	do { \
+		md_debug_##_var = (type *)DEBUG_SYMBOL_LOOKUP(_var); \
+		if (!md_debug_##_var) { \
+			pr_err("minidump: %s symbol not available in vmlinux\n", #_var); \
+			error |= 1; \
+		} \
+	} while (0)
+
 struct priv_buf {
 	char *buf;
 	size_t size;
@@ -67,6 +77,7 @@ void md_dump_meminfo(struct seq_buf *m)
 	unsigned long sreclaimable, sunreclaim;
 	int lru;
 
+	MD_DEBUG_LOOKUP(totalcma_pages, unsigned long);
 	si_meminfo(&i);
 	si_swapinfo(&i);
 
@@ -199,6 +210,8 @@ void md_dump_slabinfo(struct seq_buf *m)
 	struct kmem_cache *s;
 	struct slabinfo sinfo;
 
+	MD_DEBUG_LOOKUP(slab_caches, struct list_head);
+	MD_DEBUG_LOOKUP(slab_mutex, struct mutex);
 	if (!md_debug_slab_caches)
 		return;
 
@@ -503,6 +516,8 @@ void md_dump_pageowner(char *addr, size_t dump_size)
 	depot_stack_handle_t handle;
 	ssize_t size;
 
+	MD_DEBUG_LOOKUP(min_low_pfn, unsigned long);
+	MD_DEBUG_LOOKUP(max_pfn, unsigned long);
 	if (!md_debug_min_low_pfn)
 		return;
 
@@ -1312,26 +1327,14 @@ void md_debugfs_dmabufprocs(struct dentry *minidump_dir)
 			&proc_dma_buf_procs_size_ops);
 }
 
-#define MD_DEBUG_LOOKUP(_var, type) \
-	do { \
-		md_debug_##_var = (type *)DEBUG_SYMBOL_LOOKUP(_var); \
-		if (!md_debug_##_var) { \
-			pr_err("minidump: %s symbol not available in vmlinux\n", #_var); \
-			error |= 1; \
-		} \
-	} while (0)
+
 
 int md_minidump_memory_init(void)
 {
-	int error = 0;
+	
 
-	MD_DEBUG_LOOKUP(totalcma_pages, unsigned long);
-	MD_DEBUG_LOOKUP(slab_caches, struct list_head);
-	MD_DEBUG_LOOKUP(slab_mutex, struct mutex);
 	MD_DEBUG_LOOKUP(page_owner_inited, struct static_key);
 	MD_DEBUG_LOOKUP(slub_debug_enabled, struct static_key);
-	MD_DEBUG_LOOKUP(min_low_pfn, unsigned long);
-	MD_DEBUG_LOOKUP(max_pfn, unsigned long);
 
 	return error;
 }

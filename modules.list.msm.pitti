@@ -36,7 +36,6 @@ qcom-spmi-pmic.ko
 pinctrl-spmi-gpio.ko
 nvmem_qcom-spmi-sdam.ko
 rtc-pm8xxx.ko
-msm-poweroff.ko
 qcom-ipcc.ko
 clk-dummy.ko
 clk-qcom.ko

@@ -338,4 +338,11 @@ config QORIQ_CPUFREQ
 	  which are capable of changing the CPU's frequency dynamically.
 
 endif
+
+config MI_CPU_MAX_FREQ
+	tristate "Xiaomi cpu max frequency value"
+	default n
+	help
+	  Say 'm' here to support MI CPU MAX FREQ detection
+
 endmenu

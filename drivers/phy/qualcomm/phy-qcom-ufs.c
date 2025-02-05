@@ -18,6 +18,7 @@
 
 #define UFS_PHY_DEFAULT_LANES_PER_DIRECTION	1
 
+
 /**
  * struct ufs_qcom_phy_regs - record the info of ufs qcom phy register domain.
  * @list_head: the list to find all ufs phy register domins.

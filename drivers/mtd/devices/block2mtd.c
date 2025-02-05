@@ -61,7 +61,6 @@ static int _block2mtd_erase(struct block2mtd_dev *dev, loff_t to, size_t len)
 	int pages = len >> PAGE_SHIFT;
 	u_long *p;
 	u_long *max;
-
 	while (pages) {
 		page = page_read(mapping, index);
 		if (IS_ERR(page))
@@ -77,7 +76,6 @@ static int _block2mtd_erase(struct block2mtd_dev *dev, loff_t to, size_t len)
 				balance_dirty_pages_ratelimited(mapping);
 				break;
 			}
-
 		put_page(page);
 		pages--;
 		index++;
@@ -90,13 +88,11 @@ static int block2mtd_erase(struct mtd_info *mtd, struct erase_info *instr)
 	size_t from = instr->addr;
 	size_t len = instr->len;
 	int err;
-
 	mutex_lock(&dev->write_mutex);
 	err = _block2mtd_erase(dev, from, len);
 	mutex_unlock(&dev->write_mutex);
 	if (err)
 		pr_err("erase failed err = %d\n", err);
-
 	return err;
 }
 
@@ -109,7 +105,6 @@ static int block2mtd_read(struct mtd_info *mtd, loff_t from, size_t len,
 	pgoff_t index = from >> PAGE_SHIFT;
 	int offset = from & (PAGE_SIZE-1);
 	int cpylen;
-
 	while (len) {
 		if ((offset + len) > PAGE_SIZE)
 			cpylen = PAGE_SIZE - offset;	// multiple pages
@@ -120,7 +115,6 @@ static int block2mtd_read(struct mtd_info *mtd, loff_t from, size_t len,
 		page = page_read(dev->blkdev->bd_inode->i_mapping, index);
 		if (IS_ERR(page))
 			return PTR_ERR(page);
-
 		memcpy(buf, page_address(page) + offset, cpylen);
 		put_page(page);
 
@@ -143,18 +137,16 @@ static int _block2mtd_write(struct block2mtd_dev *dev, const u_char *buf,
 	pgoff_t index = to >> PAGE_SHIFT;	// page index
 	int offset = to & ~PAGE_MASK;	// page offset
 	int cpylen;
-
+	printk(KERN_ERR "_block2mtd_write: start len = %d, mapping_index= %d \n",len,index);
 	while (len) {
 		if ((offset+len) > PAGE_SIZE)
 			cpylen = PAGE_SIZE - offset;	// multiple pages
 		else
 			cpylen = len;			// this page
 		len = len - cpylen;
-
 		page = page_read(mapping, index);
 		if (IS_ERR(page))
 			return PTR_ERR(page);
-
 		if (memcmp(page_address(page)+offset, buf, cpylen)) {
 			lock_page(page);
 			memcpy(page_address(page) + offset, buf, cpylen);
@@ -163,14 +155,13 @@ static int _block2mtd_write(struct block2mtd_dev *dev, const u_char *buf,
 			balance_dirty_pages_ratelimited(mapping);
 		}
 		put_page(page);
-
 		if (retlen)
 			*retlen += cpylen;
-
 		buf += cpylen;
 		offset = 0;
 		index++;
 	}
+	printk(KERN_ERR "_block2mtd_write: finish all \n");
 	return 0;
 }
 
@@ -180,12 +171,12 @@ static int block2mtd_write(struct mtd_info *mtd, loff_t to, size_t len,
 {
 	struct block2mtd_dev *dev = mtd->priv;
 	int err;
-
 	mutex_lock(&dev->write_mutex);
 	err = _block2mtd_write(dev, buf, to, len, retlen);
 	mutex_unlock(&dev->write_mutex);
 	if (err > 0)
 		err = 0;
+	dev->mtd._sync(mtd);
 	return err;
 }
 
@@ -203,29 +194,41 @@ static void block2mtd_free_device(struct block2mtd_dev *dev)
 {
 	if (!dev)
 		return;
-
 	kfree(dev->mtd.name);
-
 	if (dev->blkdev) {
 		invalidate_mapping_pages(dev->blkdev->bd_inode->i_mapping,
 					0, -1);
 		blkdev_put(dev->blkdev, FMODE_READ|FMODE_WRITE|FMODE_EXCL);
 	}
-
 	kfree(dev);
 }
 
-
+int delSubStr(char * src, char * sub,char * result)
+{
+	int i,find = 0;
+	int len_src = strlen(src);
+	int len_sub = strlen(sub);
+	for( i = 0 ; i <= len_src - len_sub; i++){
+		if(strncmp(src+i, sub, len_sub)==0){
+			strncpy(result,src,i);
+			strncpy(result+i,src+i+len_sub,len_src-i-len_sub);
+			find =1;
+			break;
+		}
+	}
+	return find;
+}
 static struct block2mtd_dev *add_device(char *devname, int erase_size,
 		char *label, int timeout)
 {
-#ifndef MODULE
+//#ifndef MODULE
 	int i;
-#endif
+//#endif
 	const fmode_t mode = FMODE_READ | FMODE_WRITE | FMODE_EXCL;
 	struct block_device *bdev;
 	struct block2mtd_dev *dev;
 	char *name;
+	char name_for_find_devt[80]={0};
 
 	if (!devname)
 		return NULL;
@@ -237,11 +240,13 @@ static struct block2mtd_dev *add_device(char *devname, int erase_size,
 	/* Get a handle on the device */
 	bdev = blkdev_get_by_path(devname, mode, dev);
 
-#ifndef MODULE
+//#ifndef MODULE
 	/*
 	 * We might not have the root device mounted at this point.
 	 * Try to resolve the device name by other means.
 	 */
+	if(!delSubStr(devname, "block/",name_for_find_devt))
+		return NULL;
 	for (i = 0; IS_ERR(bdev) && i <= timeout; i++) {
 		dev_t devt;
 
@@ -253,16 +258,16 @@ static struct block2mtd_dev *add_device(char *devname, int erase_size,
 			 */
 			msleep(1000);
 		wait_for_device_probe();
-
-		devt = name_to_dev_t(devname);
+		devt = name_to_dev_t(name_for_find_devt);
 		if (!devt)
 			continue;
+
 		bdev = blkdev_get_by_dev(devt, mode, dev);
 	}
-#endif
+//#endif
 
 	if (IS_ERR(bdev)) {
-		pr_err("error: cannot open device %s\n", devname);
+		pr_err("error: cannot open1111 device %s\n", devname);
 		goto err_free_block2mtd;
 	}
 	dev->blkdev = bdev;
@@ -278,7 +283,6 @@ static struct block2mtd_dev *add_device(char *devname, int erase_size,
 	}
 
 	mutex_init(&dev->write_mutex);
-
 	/* Setup the MTD structure */
 	/* make the name contain the block device in */
 	if (!label)
@@ -289,7 +293,6 @@ static struct block2mtd_dev *add_device(char *devname, int erase_size,
 		goto err_destroy_mutex;
 
 	dev->mtd.name = name;
-
 	dev->mtd.size = dev->blkdev->bd_inode->i_size & PAGE_MASK;
 	dev->mtd.erasesize = erase_size;
 	dev->mtd.writesize = 1;
@@ -302,7 +305,6 @@ static struct block2mtd_dev *add_device(char *devname, int erase_size,
 	dev->mtd._read = block2mtd_read;
 	dev->mtd.priv = dev;
 	dev->mtd.owner = THIS_MODULE;
-
 	if (mtd_device_register(&dev->mtd, NULL, 0)) {
 		/* Device didn't get added, so free the entry */
 		goto err_destroy_mutex;
@@ -313,6 +315,7 @@ static struct block2mtd_dev *add_device(char *devname, int erase_size,
 		dev->mtd.index,
 		label ? label : dev->mtd.name + strlen("block2mtd: "),
 		dev->mtd.erasesize >> 10, dev->mtd.erasesize);
+	pr_err("block2mtd: add device sucess \n");
 	return dev;
 
 err_destroy_mutex:
@@ -434,9 +437,7 @@ static int block2mtd_setup2(const char *val)
 		label = token[2];
 		pr_info("Using custom MTD label '%s' for dev %s\n", label, name);
 	}
-
 	add_device(name, erase_size, label, timeout);
-
 	return 0;
 }
 
@@ -450,7 +451,6 @@ static int block2mtd_setup(const char *val, const struct kernel_param *kp)
 	   /sys/module/block2mtd/parameters/block2mtd
 	   and block2mtd_init() has already been called,
 	   we can parse the argument now. */
-
 	if (block2mtd_init_called)
 		return block2mtd_setup2(val);
 
@@ -460,7 +460,6 @@ static int block2mtd_setup(const char *val, const struct kernel_param *kp)
 	   called so early that it is not possible to resolve
 	   the device (even kmalloc() fails). Deter that work to
 	   block2mtd_setup2(). */
-
 	strscpy(block2mtd_paramline, val, sizeof(block2mtd_paramline));
 
 	return 0;
@@ -488,7 +487,6 @@ static int __init block2mtd_init(void)
 static void block2mtd_exit(void)
 {
 	struct list_head *pos, *next;
-
 	/* Remove the MTD devices */
 	list_for_each_safe(pos, next, &blkmtd_device_list) {
 		struct block2mtd_dev *dev = list_entry(pos, typeof(*dev), list);
