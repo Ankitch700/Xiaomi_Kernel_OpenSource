@@ -660,7 +660,10 @@ done:
  */
 static void lpm_reflect(struct cpuidle_device *dev, int state)
 {
+	struct lpm_cpu *cpu_gov = this_cpu_ptr(&lpm_cpu_data);
 
+	if (state && cluster_gov_ops && cluster_gov_ops->reflect)
+		cluster_gov_ops->reflect(cpu_gov);
 }
 
 /**
@@ -708,7 +711,7 @@ static void lpm_idle_exit(void *unused, int state, struct cpuidle_device *dev)
 }
 
 static int suspend_lpm_notify(struct notifier_block *nb,
-			      unsigned long mode, void *_unused)
+				unsigned long mode, void *_unused)
 {
 	int cpu;
 

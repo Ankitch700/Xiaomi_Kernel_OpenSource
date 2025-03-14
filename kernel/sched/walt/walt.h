@@ -495,6 +495,7 @@ extern cpumask_t cpus_for_pipeline;
 #define WALT_CPUFREQ_SHARED_RAIL_BIT		BIT(7)
 #define WALT_CPUFREQ_TRAILBLAZER_BIT		BIT(8)
 #define WALT_CPUFREQ_SMART_FREQ_BIT		BIT(9)
+
 #define WALT_CPUFREQ_PIPELINE_BUSY_BIT		BIT(10)
 
 /* CPUFREQ_REASON_LOAD is unused. If reasons value is 0, this indicates
@@ -523,6 +524,8 @@ extern cpumask_t cpus_for_pipeline;
 #define CPUFREQ_REASON_ADAPTIVE_LVL_1_BIT	BIT(17)
 #define CPUFREQ_REASON_IPC_SMART_FREQ_BIT	BIT(18)
 #define CPUFREQ_REASON_PIPELINE_BUSY_BIT	BIT(19)
+
+
 
 enum sched_boost_policy {
 	SCHED_BOOST_NONE,
@@ -1453,6 +1456,7 @@ extern int sched_smart_freq_legacy_dump_handler(struct ctl_table *table, int wri
 					      void __user *buffer, size_t *lenp, loff_t *ppos);
 extern int sched_smart_freq_ipc_dump_handler(struct ctl_table *table, int write,
 					   void __user *buffer, size_t *lenp, loff_t *ppos);
+extern struct task_struct *sched_lib_task_struct;
 extern unsigned int sysctl_ipc_freq_levels_cluster0[SMART_FMAX_IPC_MAX];
 extern unsigned int sysctl_ipc_freq_levels_cluster1[SMART_FMAX_IPC_MAX];
 extern unsigned int sysctl_ipc_freq_levels_cluster2[SMART_FMAX_IPC_MAX];

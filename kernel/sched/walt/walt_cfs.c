@@ -13,6 +13,8 @@
 #include <../../../drivers/android/binder_internal.h>
 #include "../../../drivers/android/binder_trace.h"
 
+
+
 static void create_util_to_cost_pd(struct em_perf_domain *pd)
 {
 	int util, cpu = cpumask_first(to_cpumask(pd->cpus));
@@ -175,6 +177,7 @@ static void walt_get_indicies(struct task_struct *p, int *order_index,
 		int *end_index, int per_task_boost, bool is_uclamp_boosted,
 		bool *energy_eval_needed)
 {
+
 	*order_index = 0;
 	*end_index = 0;
 
@@ -187,7 +190,10 @@ static void walt_get_indicies(struct task_struct *p, int *order_index,
 		return;
 	}
 
+
+
 	if (is_full_throttle_boost()) {
+
 		*energy_eval_needed = false;
 		*order_index = num_sched_clusters - 1;
 		*end_index = num_sched_clusters - 2;
@@ -200,6 +206,8 @@ static void walt_get_indicies(struct task_struct *p, int *order_index,
 				break;
 		return;
 	}
+
+
 
 	if (is_uclamp_boosted || per_task_boost ||
 		task_boost_policy(p) == SCHED_BOOST_ON_BIG ||
@@ -239,7 +247,9 @@ enum fastpaths {
 	PREV_CPU_FASTPATH,
 	CLUSTER_PACKING_FASTPATH,
 	PIPELINE_FASTPATH,
+
 	YIELD_FASTPATH,
+
 };
 
 static inline bool is_complex_sibling_idle(int cpu)
@@ -339,6 +349,7 @@ static void walt_find_best_target(struct sched_domain *sd,
 	struct walt_task_struct *wts = (struct walt_task_struct *) p->android_vendor_data1;
 	int packing_cpu;
 
+
 	/* Find start CPU based on boost value */
 	start_cpu = fbt_env->start_cpu;
 
@@ -356,6 +367,8 @@ static void walt_find_best_target(struct sched_domain *sd,
 		most_spare_wake_cap = LONG_MIN;
 	}
 
+
+
 	/* fast path for packing_cpu */
 	packing_cpu = walt_find_and_choose_cluster_packing_cpu(start_cpu, p);
 	if (packing_cpu >= 0) {
@@ -371,11 +384,13 @@ static void walt_find_best_target(struct sched_domain *sd,
 		goto out;
 	}
 
+
 	for (cluster = 0; cluster < num_sched_clusters; cluster++) {
 		int best_idle_cpu_cluster = -1;
 		int target_cpu_cluster = -1;
 		int this_complex_idle = 0;
 		int best_complex_idle = 0;
+
 
 		target_max_spare_cap = 0;
 		min_exit_latency = INT_MAX;
@@ -383,6 +398,7 @@ static void walt_find_best_target(struct sched_domain *sd,
 
 		cpumask_and(&visit_cpus, p->cpus_ptr,
 				&cpu_array[order_index][cluster]);
+
 		for_each_cpu(i, &visit_cpus) {
 			unsigned long capacity_orig = capacity_orig_of(i);
 			unsigned long wake_cpu_util, new_cpu_util, new_util_cuml;
@@ -509,6 +525,8 @@ static void walt_find_best_target(struct sched_domain *sd,
 					continue;
 			}
 
+
+
 			target_max_spare_cap = spare_cap;
 			target_nr_rtg_high_prio = walt_nr_rtg_high_prio(i);
 			target_cpu_cluster = i;
@@ -544,6 +562,7 @@ static void walt_find_best_target(struct sched_domain *sd,
 			cpumask_set_cpu(prev_cpu, candidates);
 		else if (least_nr_cpu != -1)
 			cpumask_set_cpu(least_nr_cpu, candidates);
+
 	}
 
 out:
@@ -857,6 +876,8 @@ int walt_find_energy_efficient_cpu(struct task_struct *p, int prev_cpu,
 	struct walt_task_struct *wts;
 	int pipeline_cpu;
 
+
+
 	if (walt_is_many_wakeup(sibling_count_hint) && prev_cpu != cpu &&
 			cpumask_test_cpu(prev_cpu, p->cpus_ptr))
 		return prev_cpu;
@@ -877,6 +898,7 @@ int walt_find_energy_efficient_cpu(struct task_struct *p, int prev_cpu,
 		cpumask_test_cpu(pipeline_cpu, p->cpus_ptr) &&
 		cpu_active(pipeline_cpu) &&
 		!cpu_halted(pipeline_cpu) &&
+
 		!walt_pipeline_low_latency_task(cpu_rq(pipeline_cpu)->curr)) {
 		best_energy_cpu = pipeline_cpu;
 		fbt_env.fastpath = PIPELINE_FASTPATH;
@@ -896,8 +918,11 @@ int walt_find_energy_efficient_cpu(struct task_struct *p, int prev_cpu,
 		goto out;
 	}
 
+
+
 	walt_get_indicies(p, &order_index, &end_index, task_boost, uclamp_boost,
 								&energy_eval_needed);
+
 	start_cpu = cpumask_first(&cpu_array[order_index][0]);
 
 	is_rtg = task_in_related_thread_group(p);
@@ -944,6 +969,7 @@ int walt_find_energy_efficient_cpu(struct task_struct *p, int prev_cpu,
 		goto unlock;
 
 	first_cpu = cpumask_first(candidates);
+
 
 	if (fbt_env.fastpath == CLUSTER_PACKING_FASTPATH) {
 		best_energy_cpu = first_cpu;
@@ -1053,12 +1079,15 @@ fail:
 	return -1;
 }
 
+
 static void
 walt_select_task_rq_fair(void *unused, struct task_struct *p, int prev_cpu,
 				int sd_flag, int wake_flags, int *target_cpu)
 {
 	int sync;
 	int sibling_count_hint;
+
+
 
 	if (unlikely(walt_disabled))
 		return;
@@ -1365,6 +1394,7 @@ static void walt_cfs_check_preempt_wakeup(void *unused, struct rq *rq, struct ta
 	bool resched = false, skip_mvp;
 	bool p_is_mvp, curr_is_mvp;
 
+
 	if (unlikely(walt_disabled))
 		return;
 
@@ -1426,6 +1456,7 @@ static void walt_cfs_replace_next_task_fair(void *unused, struct rq *rq, struct 
 	struct walt_task_struct *wts;
 	struct task_struct *mvp;
 	struct cfs_rq *cfs_rq;
+
 
 	if (unlikely(walt_disabled))
 		return;
@@ -1526,4 +1557,5 @@ void walt_cfs_init(void)
 
 	register_trace_android_rvh_check_preempt_wakeup(walt_cfs_check_preempt_wakeup, NULL);
 	register_trace_android_rvh_replace_next_task_fair(walt_cfs_replace_next_task_fair, NULL);
+
 }

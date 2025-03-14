@@ -29,6 +29,8 @@
 #include "bwmon.h"
 #include "trace-dcvs.h"
 
+
+
 static LIST_HEAD(hwmon_list);
 static DEFINE_SPINLOCK(list_lock);
 static DEFINE_SPINLOCK(sample_irq_lock);
@@ -386,6 +388,8 @@ static BWMON_ATTR_RW(sched_boost_freq);
 show_list_attr(mbps_zones, NUM_MBPS_ZONES);
 store_list_attr(mbps_zones, NUM_MBPS_ZONES, 0U, UINT_MAX);
 static BWMON_ATTR_RW(mbps_zones);
+
+
 
 static struct attribute *bwmon_attrs[] = {
 	&min_freq.attr,
@@ -811,6 +815,8 @@ static bool bwmon_update_cur_freq(struct hwmon_node *node)
 		new_freq.ib = max(new_freq.ib, node->sched_boost_freq);
 	primary_ib_mbps = KHZ_TO_MBPS(new_freq.ib, hw->dcvs_width);
 
+
+
 	if (new_freq.ib != node->cur_freqs[0].ib ||
 			new_freq.ab != node->cur_freqs[0].ab) {
 		node->cur_freqs[0].ib = new_freq.ib;
@@ -887,6 +893,8 @@ static void bwmon_jiffies_update_cb(void *unused, void *extra)
 	bool sched_update = false, low_power_update = false;
 	int new_boost_state = -1;
 
+
+
 	spin_lock_irqsave(&list_lock, flags);
 	list_for_each_entry(node, &hwmon_list, list) {
 		hw = node->hw;
@@ -905,6 +913,9 @@ static void bwmon_jiffies_update_cb(void *unused, void *extra)
 			low_power_update = should_trigger_low_power_update(node);
 		else
 			node->use_low_power_io_percent = false;
+
+
+
 		delta_ns = now - hw->last_update_ts + HALF_TICK_NS;
 		if (delta_ns > ms_to_ktime(hw->node->window_ms)
 				|| sched_update || low_power_update) {
@@ -914,6 +925,8 @@ static void bwmon_jiffies_update_cb(void *unused, void *extra)
 	}
 	spin_unlock_irqrestore(&list_lock, flags);
 }
+
+
 
 static void bwmon_monitor_work(struct work_struct *work)
 {
@@ -2160,6 +2173,8 @@ static int init_and_start_bwmon(struct platform_device *pdev, struct bwmon *m)
 		}
 		register_trace_android_vh_jiffies_update(
 						bwmon_jiffies_update_cb, NULL);
+
+
 	}
 	mutex_unlock(&bwmon_lock);
 	ret = start_monitor(&m->hw);

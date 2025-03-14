@@ -164,3 +164,9 @@ config SCSI_UFS_CRYPTO_QTI
 
 	  Select this to enable QCOM Hardware Wrapped Key support for the
 	  ICE hardware.
+
+config MI_UFS_MODULE
+        bool "MI ufs driver module"
+        depends on SCSI_UFS_QCOM
+        help
+          This selects the mi ufs driver. Deselect it if you update mainline.

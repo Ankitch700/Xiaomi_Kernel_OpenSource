@@ -3,6 +3,7 @@ load(":msm_kernel_la.bzl", "define_msm_la")
 load(":image_opts.bzl", "boot_image_opts")
 
 target_name = "monaco"
+target_arch = "monaco"
 
 def define_monaco():
     _monaco_in_tree_modules = [
@@ -216,6 +217,7 @@ def define_monaco():
 
         define_msm_la(
             msm_target = target_name,
+			msm_arch = target_arch,
             variant = variant,
             in_tree_module_list = mod_list,
             boot_image_opts = boot_image_opts(

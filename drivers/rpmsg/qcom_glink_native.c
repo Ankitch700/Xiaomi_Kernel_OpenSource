@@ -24,6 +24,8 @@
 #include <linux/suspend.h>
 #include <linux/termios.h>
 #include <linux/ipc_logging.h>
+#include <uapi/linux/sched/types.h>
+#include <linux/wakeup_reason.h>
 
 #include "rpmsg_internal.h"
 #include "qcom_glink_native.h"
@@ -243,6 +245,7 @@ struct glink_channel {
 	wait_queue_head_t intent_req_wq;
 	bool channel_ready;
 	int intent_timeout_count;
+	bool is_rt;
 
 	unsigned int local_signals;
 	unsigned int remote_signals;
@@ -332,7 +335,9 @@ static void qcom_glink_channel_release(struct kref *ref)
 
 	spin_lock_irqsave(&channel->recv_lock, flags);
 	list_for_each_entry_safe(intent, tmp, &channel->rx_queue, node) {
+		spin_lock(&channel->intent_lock);
 		idr_remove(&channel->liids, intent->id);
+		spin_unlock(&channel->intent_lock);
 		if (!intent->size)
 			intent->data = NULL;
 		kfree(intent->data);
@@ -350,6 +355,8 @@ static void qcom_glink_channel_release(struct kref *ref)
 	}
 
 	idr_for_each_entry(&channel->liids, tmp, iid) {
+		if (!tmp->size)
+			tmp->data = NULL;
 		kfree(tmp->data);
 		kfree(tmp);
 	}
@@ -1089,8 +1096,12 @@ static int qcom_glink_rx_thread(void *data)
 	struct glink_core_rx_intent *intent;
 	struct glink_channel *channel = data;
 	struct qcom_glink *glink = channel->glink;
+	struct sched_param param = {.sched_priority = 1};
 	unsigned long flags;
 	int ret = 0;
+
+	if (channel->is_rt)
+		sched_setscheduler_nocheck(current, SCHED_FIFO, &param);
 
 	for (;;) {
 		ret = wait_event_interruptible(channel->rx_wq, !list_empty(&channel->rx_queue) ||
@@ -1549,9 +1560,11 @@ void qcom_glink_native_rx(struct qcom_glink *glink)
 
 	if (should_wake) {
 		dev_dbg(glink->dev, "%s: wakeup\n", __func__);
+		pr_info("%s: wakeup %s\n", __func__, glink->name);
 		glink_resume_pkt = true;
 		should_wake = false;
 		pm_system_wakeup();
+		log_abnormal_wakeup_reason("%s\n", glink->name);
 	}
 	/* To wakeup any blocking writers */
 	wake_up_all(&glink->tx_avail_notify);
@@ -1567,6 +1580,7 @@ void qcom_glink_native_rx(struct qcom_glink *glink)
 		param1 = le16_to_cpu(msg.param1);
 		param2 = le32_to_cpu(msg.param2);
 
+		GLINK_INFO(glink->ilc, "cmd: %d\n", cmd);
 		switch (cmd) {
 		case GLINK_CMD_VERSION:
 		case GLINK_CMD_VERSION_ACK:
@@ -1612,6 +1626,7 @@ void qcom_glink_native_rx(struct qcom_glink *glink)
 			if (retry < 5)
 				continue;
 			else {
+                panic("unhandled rx cmd: %d\n", cmd);
 				ret = -EINVAL;
 				break;
 			}
@@ -1802,8 +1817,15 @@ static int qcom_glink_announce_create(struct rpmsg_device *rpdev)
 		CH_ERR(channel, "channel thread failed to run\n");
 		rc = PTR_ERR(channel->rx_task);
 		channel->rx_task = NULL;
+		goto exit;
 	}
 
+	if (of_property_read_bool(np, "qcom,ch-sched-rt"))
+		channel->is_rt = true;
+	else
+		channel->is_rt = false;
+
+exit:
 	CH_INFO(channel, "Exit\n");
 	return rc;
 }

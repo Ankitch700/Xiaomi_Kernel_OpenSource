@@ -13,8 +13,10 @@
 #include <linux/notifier.h>
 #include <linux/panic_notifier.h>
 #include <soc/qcom/ice.h>
+
 #include <ufs/ufshcd.h>
 #include <ufs/unipro.h>
+
 
 #define MAX_UFS_QCOM_HOSTS	2
 #define MAX_U32                 (~(u32)0)
@@ -491,6 +493,8 @@ struct ufs_qcom_dev_params {
 	u32 desired_working_mode;
 };
 
+
+
 struct ufs_qcom_host {
 	/*
 	 * Set this capability if host controller supports the QUniPro mode
@@ -527,6 +531,7 @@ struct ufs_qcom_host {
 	struct ufs_hba *hba;
 	struct ufs_qcom_bus_vote bus_vote;
 	struct ufs_pa_layer_attr dev_req_params;
+
 	struct clk *rx_l0_sync_clk;
 	struct clk *tx_l0_sync_clk;
 	struct clk *rx_l1_sync_clk;

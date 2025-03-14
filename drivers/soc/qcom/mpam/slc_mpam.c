@@ -61,10 +61,9 @@ static ssize_t slc_mpam_schemata_show(struct config_item *item,
 	set_msc_query(&query, get_pm_item(item));
 
 	ret = msc_system_get_partition(SLC, &query, &gear_config);
-	if (ret) {
-		pr_err("get setting failed %d\n", ret);
-		return 0;
-	}
+	if (ret)
+		return scnprintf(page, PAGE_SIZE,
+			"failed to get schemata %d\n", ret);
 
 	return scnprintf(page, PAGE_SIZE, "gear=%d\n",
 		gear_config.gear_val);
@@ -86,7 +85,7 @@ static ssize_t slc_mpam_schemata_store(struct config_item *item,
 			continue;
 		if (kstrtouint(token, 0, &input) < 0) {
 			pr_err("invalid argument for %s\n", param_name);
-			continue;
+			return -EINVAL;
 		}
 
 		if (!strcmp("gear", param_name))
@@ -94,8 +93,10 @@ static ssize_t slc_mpam_schemata_store(struct config_item *item,
 	}
 
 	ret = msc_system_set_partition(SLC, &query, &gear_config);
-	if (ret)
+	if (ret) {
 		pr_err("set slc cache partition failed, ret=%d\n", ret);
+		return -EBUSY;
+	}
 
 	return count;
 }
@@ -122,7 +123,7 @@ static ssize_t slc_mpam_enable_cap_monitor_store(struct config_item *item,
 	ret = kstrtobool(page, &input);
 	if (ret) {
 		pr_err("invalid argument\n");
-		goto exit;
+		return -EINVAL;
 	}
 
 	if (!input && pm_item->cap_mon_enabled)
@@ -137,7 +138,7 @@ static ssize_t slc_mpam_enable_cap_monitor_store(struct config_item *item,
 	if (ret) {
 		pr_err("monitor %s failed %d\n",
 			(input) ? "enable" : "disable", ret);
-		goto exit;
+		return -EBUSY;
 	}
 	pm_item->cap_mon_enabled = input;
 
@@ -186,7 +187,7 @@ static ssize_t slc_mpam_enable_miss_monitor_store(struct config_item *item,
 	ret = kstrtobool(page, &input);
 	if (ret) {
 		pr_err("invalid argument\n");
-		goto exit;
+		return -EINVAL;
 	}
 
 	if (!input && pm_item->miss_mon_enabled)
@@ -196,12 +197,12 @@ static ssize_t slc_mpam_enable_miss_monitor_store(struct config_item *item,
 	else
 		goto exit;
 
-	mon_cfg_val.slc_mon_function = CASHE_READ_MISS_CONFIG;
+	mon_cfg_val.slc_mon_function = CACHE_READ_MISS_CONFIG;
 	ret = msc_system_mon_config(SLC, &query, &mon_cfg_val);
 	if (ret) {
 		pr_err("monitor %s failed %d\n",
 			(input) ? "enable" : "disable", ret);
-		goto exit;
+		return -EBUSY;
 	}
 	pm_item->miss_mon_enabled = input;
 
@@ -239,10 +240,9 @@ static ssize_t slc_mpam_available_gear_show(struct config_item *item,
 	set_msc_query(&query, get_pm_item(item));
 
 	ret = msc_system_get_device_capability(SLC, &query, &slc_partid_cap);
-	if (ret) {
-		pr_err("get capability failed %d\n", ret);
-		return 0;
-	}
+	if (ret)
+		return scnprintf(page, PAGE_SIZE,
+			"failed to get available gear %d\n", ret);
 
 	for (i = 0; i < slc_partid_cap.num_gears; i++) {
 		gear_num = slc_partid_cap.part_id_gears[i];
@@ -290,7 +290,6 @@ static const struct config_item_type slc_mpam_base_type = {
 static int create_config_node(const char *name,
 		struct device *dev,
 		int client_id, int part_id,
-		struct device_node *np,
 		struct config_group *parent_group)
 {
 	int ret;
@@ -299,7 +298,7 @@ static int create_config_node(const char *name,
 	new_item = slc_mpam_make_group(dev, name);
 	if (IS_ERR(new_item)) {
 		pr_err("Error create group %s\n", name);
-		return -ENOMEM;
+		return PTR_ERR(new_item);
 	}
 	new_item->client_id = client_id;
 	new_item->part_id = part_id;
@@ -325,7 +324,8 @@ static int slc_mpam_probe(struct platform_device *pdev)
 	struct device_node *np = pdev->dev.of_node;
 
 	qcom_mpam_msc = qcom_msc_lookup(SLC);
-	if (!qcom_mpam_msc)
+	if (!qcom_mpam_msc ||
+		qcom_mpam_msc->mpam_available != MPAM_MONITRS_AVAILABLE)
 		return -EPROBE_DEFER;
 
 	p_group = platform_mpam_get_root_group();
@@ -359,12 +359,12 @@ static int slc_mpam_probe(struct platform_device *pdev)
 				ret = of_property_read_u32(sub_node, "qcom,part-id", &partid);
 				snprintf(buf, sizeof(buf), "partid%d", partid);
 				if (create_config_node(buf, &pdev->dev, clientid,
-						partid, sub_node, sub_group))
+						partid, sub_group))
 					continue;
 			}
 		} else
 			if (create_config_node(msc_name_dt, &pdev->dev,
-					clientid, 0, node, root_group))
+					clientid, 0, root_group))
 				continue;
 	}
 
@@ -373,7 +373,8 @@ static int slc_mpam_probe(struct platform_device *pdev)
 
 int slc_mpam_remove(struct platform_device *pdev)
 {
-	configfs_unregister_default_group(root_group);
+	configfs_unregister_group(root_group);
+	kfree(root_group);
 	return 0;
 }
 

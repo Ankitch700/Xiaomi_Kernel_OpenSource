@@ -23,6 +23,7 @@
 #include "gdsc-debug.h"
 
 static struct clk_hw *measure;
+
 static bool debug_suspend;
 static bool debug_suspend_atomic;
 static bool qcom_clk_debug_inited;
@@ -497,6 +498,8 @@ exit:
 DEFINE_DEBUGFS_ATTRIBUTE(clk_measure_fops, clk_debug_measure_get,
 			 clk_debug_measure_set, "%lld\n");
 
+
+
 void clk_debug_measure_add(struct clk_hw *hw, struct dentry *dentry)
 {
 	debugfs_create_file("clk_measure", 0444, dentry, hw, &clk_measure_fops);
@@ -536,6 +539,7 @@ int clk_debug_measure_register(struct clk_hw *hw)
 	return 0;
 }
 EXPORT_SYMBOL(clk_debug_measure_register);
+
 
 /**
  * map_debug_bases - maps each debug mux based on phandle

@@ -15,6 +15,7 @@
 #include "wcd-usbss-priv.h"
 #include "wcd-usbss-reg-masks.h"
 #include "wcd-usbss-reg-shifts.h"
+#include "../../misc/hwid/hwid.h"
 
 #define WCD_USBSS_I2C_NAME	"wcd-usbss-i2c-driver"
 
@@ -725,7 +726,6 @@ static int wcd_usbss_sysfs_init(struct wcd_usbss_ctxt *priv)
 			__func__, rc);
 		return rc;
 	}
-
 	return 0;
 }
 
@@ -744,7 +744,7 @@ static int wcd_usbss_usbc_event_changed(struct notifier_block *nb,
 	if (!dev)
 		return -EINVAL;
 
-	dev_dbg(dev, "%s: USB change event received, supply mode %d, usbc mode %d, expected %d\n",
+	dev_info(dev, "%s: USB change event received, supply mode %d, usbc mode %d, expected %d\n",
 			__func__, acc, priv->usbc_mode.counter,
 			TYPEC_ACCESSORY_AUDIO);
 
@@ -867,6 +867,10 @@ static int wcd_usbss_switch_update_defaults(struct wcd_usbss_ctxt *priv)
 				0x40, 0x00);
 	regmap_write(wcd_usbss_ctxt_->regmap, WCD_USBSS_EXT_SW_CTRL_1, 0x00);
 	regmap_write(wcd_usbss_ctxt_->regmap, WCD_USBSS_EXT_LIN_EN, 0x00);
+	regmap_write(wcd_usbss_ctxt_->regmap, WCD_USBSS_PMP_CLK, 0x10);
+	regmap_write(wcd_usbss_ctxt_->regmap, WCD_USBSS_SW_LIN_CTRL_1, 0x00);
+	regmap_write(wcd_usbss_ctxt_->regmap, WCD_USBSS_DC_TRIMCODE_2, 0x00);
+	regmap_write(wcd_usbss_ctxt_->regmap, WCD_USBSS_DC_TRIMCODE_3, 0x00);
 
 	/* Once plug-out done, restore to MANUAL mode */
 	audio_fsm_mode = WCD_USBSS_AUDIO_MANUAL;
@@ -964,9 +968,11 @@ static void wcd_usbss_pd_pu_enable(void)
 	regmap_update_bits(wcd_usbss_ctxt_->regmap, WCD_USBSS_DP_BIAS, 0x01, 0x01);
 	regmap_update_bits(wcd_usbss_ctxt_->regmap, WCD_USBSS_DN_BIAS, 0x01, 0x01);
 
-	/* Enable SBU1/2 2K PLDN */
-	regmap_update_bits(wcd_usbss_ctxt_->regmap, WCD_USBSS_MG1_BIAS, 0x01, 0x01);
-	regmap_update_bits(wcd_usbss_ctxt_->regmap, WCD_USBSS_MG2_BIAS, 0x01, 0x01);
+	if (!wcd_usbss_ctxt_->usb_sbu_compliance) {
+		/* Enable SBU1/2 2K PLDN */
+		regmap_update_bits(wcd_usbss_ctxt_->regmap, WCD_USBSS_MG1_BIAS, 0x01, 0x01);
+		regmap_update_bits(wcd_usbss_ctxt_->regmap, WCD_USBSS_MG2_BIAS, 0x01, 0x01);
+	}
 }
 
 /* to use with DPDM switch selection */
@@ -1091,16 +1097,12 @@ int wcd_usbss_audio_config(bool enable, enum wcd_usbss_config_type config_type,
 	case WCD_USBSS_CONFIG_TYPE_POWER_MODE:
 		/* switching to MBHC mode */
 		if (power_mode == 0x1) {
-			regmap_write(wcd_usbss_ctxt_->regmap, WCD_USBSS_EXT_SW_CTRL_1, 0x98);
 			regmap_write(wcd_usbss_ctxt_->regmap, WCD_USBSS_PMP_EN, 0xF);
-			regmap_write(wcd_usbss_ctxt_->regmap, WCD_USBSS_EXT_LIN_EN, 0x82);
+			regmap_write(wcd_usbss_ctxt_->regmap, WCD_USBSS_EXT_LIN_EN, 0xC4);
 			regmap_update_bits(wcd_usbss_ctxt_->regmap,
 					WCD_USBSS_USB_SS_CNTL, 0x07, power_mode);
-			regmap_write(wcd_usbss_ctxt_->regmap, WCD_USBSS_EXT_LIN_EN, 0x02);
-			regmap_write(wcd_usbss_ctxt_->regmap, WCD_USBSS_EXT_SW_CTRL_1, 0x9E);
 			regmap_write(wcd_usbss_ctxt_->regmap, WCD_USBSS_PMP_CLK, 0x10);
 		} else { /* switching to ULP/HiFi/Std */
-			regmap_write(wcd_usbss_ctxt_->regmap, WCD_USBSS_EXT_LIN_EN, 0x82);
 			if (power_mode == 0x2) /* ULP */
 				regmap_write(wcd_usbss_ctxt_->regmap, WCD_USBSS_PMP_CLK, 0x1C);
 			else
@@ -1109,8 +1111,7 @@ int wcd_usbss_audio_config(bool enable, enum wcd_usbss_config_type config_type,
 			regmap_update_bits(wcd_usbss_ctxt_->regmap,
 					WCD_USBSS_USB_SS_CNTL, 0x07, power_mode);
 			regmap_write(wcd_usbss_ctxt_->regmap, WCD_USBSS_PMP_EN, 0x0);
-			regmap_write(wcd_usbss_ctxt_->regmap, WCD_USBSS_EXT_LIN_EN, 0xB2);
-			regmap_write(wcd_usbss_ctxt_->regmap, WCD_USBSS_EXT_SW_CTRL_1, 0x90);
+			regmap_write(wcd_usbss_ctxt_->regmap, WCD_USBSS_EXT_LIN_EN, 0x00);
 		}
 		break;
 	default:
@@ -1235,8 +1236,11 @@ int wcd_usbss_switch_update(enum wcd_usbss_cable_types ctype,
 			regmap_update_bits(wcd_usbss_ctxt_->regmap,
 				WCD_USBSS_USB_SS_CNTL, 0x07, 0x01);
 			regmap_write(wcd_usbss_ctxt_->regmap, WCD_USBSS_PMP_EN, 0xF);
-			regmap_write(wcd_usbss_ctxt_->regmap, WCD_USBSS_EXT_SW_CTRL_1, 0x9E);
-			regmap_write(wcd_usbss_ctxt_->regmap, WCD_USBSS_EXT_LIN_EN, 0x02);
+			regmap_write(wcd_usbss_ctxt_->regmap, WCD_USBSS_EXT_SW_CTRL_1, 0x00);
+			regmap_write(wcd_usbss_ctxt_->regmap, WCD_USBSS_EXT_LIN_EN, 0xC4);
+			regmap_write(wcd_usbss_ctxt_->regmap, WCD_USBSS_SW_LIN_CTRL_1, 0x01);
+			regmap_write(wcd_usbss_ctxt_->regmap, WCD_USBSS_DC_TRIMCODE_2, 0x3C);
+			regmap_write(wcd_usbss_ctxt_->regmap, WCD_USBSS_DC_TRIMCODE_3, 0x0F);
 			if (wcd_usbss_ctxt_->version == WCD_USBSS_2_0)
 				regmap_update_bits(wcd_usbss_ctxt_->regmap,
 						WCD_USBSS_PMP_OUT1, 0x40, 0x40);
@@ -1299,39 +1303,33 @@ int wcd_usbss_switch_update(enum wcd_usbss_cable_types ctype,
 			if (wcd_usbss_ctxt_->version == WCD_USBSS_2_0)
 				regmap_update_bits(wcd_usbss_ctxt_->regmap,
 						WCD_USBSS_PMP_OUT1, 0x40, 0x40);
-			/* for GND MIC Swap, change mode to FSM */
-			audio_fsm_mode = WCD_USBSS_AUDIO_FSM;
-			/* Disable all switches */
+
+			/* Disable MIC switch */
 			regmap_update_bits(wcd_usbss_ctxt_->regmap,
-					WCD_USBSS_SWITCH_SETTINGS_ENABLE, 0x7F, 0x00);
-			/* Select L, R, GSBU1, MG2 */
-			regmap_update_bits(wcd_usbss_ctxt_->regmap,
-					WCD_USBSS_SWITCH_SELECT0, 0x3F, 0x01);
+					WCD_USBSS_SWITCH_SETTINGS_ENABLE, 0x02, 0x00);
 			/* Disable OVP_MG1_BIAS PCOMP_DYN_BST_EN */
 			regmap_update_bits(wcd_usbss_ctxt_->regmap,
 					WCD_USBSS_MG1_BIAS, 0x08, 0x00);
-			/* Enable SENSE, MIC switches */
-			regmap_update_bits(wcd_usbss_ctxt_->regmap,
-					WCD_USBSS_SWITCH_SETTINGS_ENABLE, 0x06, 0x06);
 			/* Select MG1 for AGND_SWITCHES */
 			regmap_update_bits(wcd_usbss_ctxt_->regmap,
 					WCD_USBSS_SWITCH_SELECT1, 0x01, 0x00);
-			/* Enable AGND switches */
+			/* Select L, R, GSBU1, MG2 */
 			regmap_update_bits(wcd_usbss_ctxt_->regmap,
-					WCD_USBSS_SWITCH_SETTINGS_ENABLE, 0x01, 0x01);
-			/* Enable DPR, DNL */
+					WCD_USBSS_SWITCH_SELECT0, 0x3F, 0x01);
+			/* Enable MIC switch */
 			regmap_update_bits(wcd_usbss_ctxt_->regmap,
-					WCD_USBSS_SWITCH_SETTINGS_ENABLE, 0x18, 0x18);
-			regmap_update_bits_base(wcd_usbss_ctxt_->regmap,
-					WCD_USBSS_AUDIO_FSM_START, 0x01, 0x01, NULL, false, true);
+					WCD_USBSS_SWITCH_SETTINGS_ENABLE, 0x02, 0x02);
 			break;
 		case WCD_USBSS_HSJ_CONNECT:
 			/* Update power mode to mode 1 for AATC */
 			regmap_update_bits(wcd_usbss_ctxt_->regmap,
 				WCD_USBSS_USB_SS_CNTL, 0x07, 0x01);
 			regmap_write(wcd_usbss_ctxt_->regmap, WCD_USBSS_PMP_EN, 0xF);
-			regmap_write(wcd_usbss_ctxt_->regmap, WCD_USBSS_EXT_SW_CTRL_1, 0x9E);
-			regmap_write(wcd_usbss_ctxt_->regmap, WCD_USBSS_EXT_LIN_EN, 0x02);
+			regmap_write(wcd_usbss_ctxt_->regmap, WCD_USBSS_EXT_SW_CTRL_1, 0x00);
+			regmap_write(wcd_usbss_ctxt_->regmap, WCD_USBSS_EXT_LIN_EN, 0xC4);
+			regmap_write(wcd_usbss_ctxt_->regmap, WCD_USBSS_SW_LIN_CTRL_1, 0x01);
+			regmap_write(wcd_usbss_ctxt_->regmap, WCD_USBSS_DC_TRIMCODE_2, 0x3C);
+			regmap_write(wcd_usbss_ctxt_->regmap, WCD_USBSS_DC_TRIMCODE_3, 0x0F);
 			if (wcd_usbss_ctxt_->version == WCD_USBSS_2_0)
 				regmap_update_bits(wcd_usbss_ctxt_->regmap,
 						WCD_USBSS_PMP_OUT1, 0x40, 0x40);
@@ -1560,9 +1558,15 @@ static int wcd_usbss_sdam_handle_events_locked(int req_state)
 		regmap_update_bits(priv->regmap, WCD_USBSS_DP_BIAS, 0x01, 0x01);
 		regmap_update_bits(priv->regmap, WCD_USBSS_DN_BIAS, 0x01, 0x01);
 
-		/* Enable SBU1/2 2K PLDN */
-		regmap_update_bits(priv->regmap, WCD_USBSS_MG1_BIAS, 0x01, 0x01);
-		regmap_update_bits(priv->regmap, WCD_USBSS_MG2_BIAS, 0x01, 0x01);
+		if (!wcd_usbss_ctxt_->usb_sbu_compliance) {
+			/* Enable SBU1/2 2K PLDN */
+			regmap_update_bits(priv->regmap, WCD_USBSS_MG1_BIAS, 0x01, 0x01);
+			regmap_update_bits(priv->regmap, WCD_USBSS_MG2_BIAS, 0x01, 0x01);
+		} else {
+			/* Disable SBU1/2 2K PLDN */
+			regmap_update_bits(priv->regmap, WCD_USBSS_MG1_BIAS, 0x01, 0x00);
+			regmap_update_bits(priv->regmap, WCD_USBSS_MG2_BIAS, 0x01, 0x00);
+		}
 		/* Disconnect D+/D- switch */
 		wcd_usbss_dpdm_switch_update_from_handler(false, false);
 
@@ -1592,9 +1596,16 @@ static int wcd_usbss_sdam_handle_events_locked(int req_state)
 		/* Disable D+/D- 1M & 400K PLDN */
 		regmap_update_bits(priv->regmap, WCD_USBSS_BIAS_TOP, 0x20, 0x20);
 
-		/* Disable SBU1/2 2K PLDN */
-		regmap_update_bits(priv->regmap, WCD_USBSS_MG1_BIAS, 0x01, 0x00);
-		regmap_update_bits(priv->regmap, WCD_USBSS_MG2_BIAS, 0x01, 0x00);
+		if (!wcd_usbss_ctxt_->usb_sbu_compliance) {
+			/* Disable SBU1/2 2K PLDN */
+			regmap_update_bits(priv->regmap, WCD_USBSS_MG1_BIAS, 0x01, 0x00);
+			regmap_update_bits(priv->regmap, WCD_USBSS_MG2_BIAS, 0x01, 0x00);
+		} else {
+			/* Disable SBU1/2 2K PLDN */
+			regmap_update_bits(priv->regmap, WCD_USBSS_MG1_BIAS, 0x01, 0x01);
+			regmap_update_bits(priv->regmap, WCD_USBSS_MG2_BIAS, 0x01, 0x01);
+		}
+
 		/* USB Mode : Connect D+/D- switch */
 		wcd_usbss_dpdm_switch_connect(priv, true);
 
@@ -1608,11 +1619,15 @@ static int wcd_usbss_sdam_handle_events_locked(int req_state)
 		/* Enable DP/DN 2K PLDN */
 		regmap_update_bits(priv->regmap, WCD_USBSS_DP_BIAS, 0x01, 0x01);
 		regmap_update_bits(priv->regmap, WCD_USBSS_DN_BIAS, 0x01, 0x01);
-
-		/* Enable SBU1/2 2K PLDN */
-		regmap_update_bits(priv->regmap, WCD_USBSS_MG1_BIAS, 0x01, 0x01);
-		regmap_update_bits(priv->regmap, WCD_USBSS_MG2_BIAS, 0x01, 0x01);
-
+		if (!wcd_usbss_ctxt_->usb_sbu_compliance) {
+			/* Enable SBU1/2 2K PLDN */
+			regmap_update_bits(priv->regmap, WCD_USBSS_MG1_BIAS, 0x01, 0x01);
+			regmap_update_bits(priv->regmap, WCD_USBSS_MG2_BIAS, 0x01, 0x01);
+		}  else {
+			/* Disable SBU1/2 2K PLDN */
+			regmap_update_bits(priv->regmap, WCD_USBSS_MG1_BIAS, 0x01, 0x00);
+			regmap_update_bits(priv->regmap, WCD_USBSS_MG2_BIAS, 0x01, 0x00);
+		}
 		/* Connect D+/D- switch */
 		wcd_usbss_dpdm_switch_connect(priv, true);
 
@@ -1654,7 +1669,7 @@ static irqreturn_t wcd_usbss_sdam_notifier_handler(int irq, void *data)
 
 	rc = acquire_runtime_env(wcd_usbss_ctxt_);
 	if (rc == -EACCES) {
-		dev_dbg(priv->dev, "%s: acquire_runtime_env failed: %d, check suspend\n",
+		dev_err(priv->dev, "%s: acquire_runtime_env failed: %d, check suspend\n",
 				__func__, rc);
 	} else if (rc < 0) {
 		dev_err(priv->dev, "%s: acquire_runtime_env failed: %d\n",
@@ -1670,7 +1685,7 @@ static irqreturn_t wcd_usbss_sdam_notifier_handler(int irq, void *data)
 		goto release_runtime;
 	}
 
-	dev_dbg(priv->dev, "executing wcd state transition from %s to %s\n",
+	dev_info(priv->dev, "executing wcd state transition from %s to %s\n",
 			status_to_str(priv->wcd_standby_status), status_to_str(buf[0]));
 
 	rc = wcd_usbss_sdam_handle_events_locked(buf[0]);
@@ -1726,6 +1741,7 @@ static int wcd_usbss_probe(struct i2c_client *i2c)
 	struct device *dev = &i2c->dev;
 	int rc = 0, i;
 	unsigned int ver = 0;
+	uint32_t platform_id, hw_country_ver;
 
 	priv = devm_kzalloc(&i2c->dev, sizeof(*priv), GFP_KERNEL);
 	if (!priv)
@@ -1787,6 +1803,24 @@ static int wcd_usbss_probe(struct i2c_client *i2c)
 
 		dev_err(priv->dev, "Failed to initialize regmap: %d\n", rc);
 		goto err_data;
+	}
+	if (of_find_property(i2c->dev.of_node, "wcd-usb-sbu-compliance", NULL)) {
+		platform_id = get_hw_version_platform();
+		hw_country_ver = get_hw_country_version();
+		dev_warn(priv->dev, " platform_id:%u, hw_country_ver:%u \n", platform_id, hw_country_ver);
+		if ((platform_id == HARDWARE_PROJECT_O3) &&
+			(((uint32_t)CountryGlobal == hw_country_ver) || ((uint32_t)CountryIndia == hw_country_ver))) {
+			dev_dbg(priv->dev, "disabling SBU pulldowns for USB compliance\n");
+			priv->usb_sbu_compliance = true;
+			/*
+			 * external zener diode installed,
+			 * disable OVP protections on SBUx. SBUx pull-downs are disabled.
+			 * This is needed for USB compliance requirement (related to
+			 * impedance) on SBUx
+			 */
+			regmap_update_bits(priv->regmap, WCD_USBSS_MG1_BIAS, 0x01, 0x00);
+			regmap_update_bits(priv->regmap, WCD_USBSS_MG2_BIAS, 0x01, 0x00);
+		}
 	}
 
 	/* OVP-Fuse settings recommended from HW */
@@ -1907,12 +1941,12 @@ static int wcd_usbss_pm_resume(struct device *dev)
 
 	mutex_lock(&wcd_usbss_ctxt_->switch_update_lock);
 	if (wcd_usbss_ctxt_->defer_writes) {
-		dev_dbg(wcd_usbss_ctxt_->dev, "wcd defer writes in progress");
+		dev_info(wcd_usbss_ctxt_->dev, "wcd defer writes in progress");
 		rc = wcd_usbss_sdam_handle_events_locked(wcd_usbss_ctxt_->req_state);
 		wcd_usbss_ctxt_->defer_writes = false;
 		if (rc == 0) {
 			wcd_usbss_ctxt_->wcd_standby_status = wcd_usbss_ctxt_->req_state;
-			dev_dbg(wcd_usbss_ctxt_->dev, "wcd state transition to %s complete\n",
+			dev_info(wcd_usbss_ctxt_->dev, "wcd state transition to %s complete\n",
 					status_to_str(wcd_usbss_ctxt_->wcd_standby_status));
 		}
 	}

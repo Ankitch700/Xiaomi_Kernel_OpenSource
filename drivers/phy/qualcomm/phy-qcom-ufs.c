@@ -588,6 +588,7 @@ EXPORT_SYMBOL_GPL(ufs_qcom_phy_disable_vreg);
 
 static void ufs_qcom_phy_disable_ref_clk(struct ufs_qcom_phy *phy)
 {
+
 	if (phy->is_ref_clk_enabled) {
 		/*
 		 * "ref_aux_clk" is optional clock and only supported by

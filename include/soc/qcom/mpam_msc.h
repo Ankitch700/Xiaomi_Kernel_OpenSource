@@ -33,6 +33,11 @@ struct msc_query {
 	uint16_t client_id;
 } __packed;
 
+enum mpam_state {
+	MPAM_UNINITIALIZAED = 1,
+	MPAM_AVAILABLE = 2,
+	MPAM_MONITRS_AVAILABLE = 6,
+};
 
 struct qcom_mpam_msc {
 	uint32_t msc_id;
@@ -46,17 +51,20 @@ struct qcom_mpam_msc {
 	struct device *dev;
 	void __iomem *mon_base;
 	struct list_head node;
+	uint32_t mpam_available;
 } __packed;
 
 struct mpam_msc_ops {
 	int (*set_cache_partition)(struct device *dev, void *msc_partid, void *msc_partconfig);
 	int (*get_cache_partition)(struct device *dev, void *msc_partid, void *msc_partconfig);
-	int (*get_cache_partition_capability)(struct device *dev, void *msc_partid, void *msc_partconfig);
+	int (*get_cache_partition_capability)(struct device *dev, void *msc_partid,
+			void *msc_partconfig);
 	int (*reset_cache_partition)(struct device *dev, void *msc_partid, void *msc_partconfig);
 	int (*mon_config)(struct device *dev, void *msc_partid, void *msc_partconfig);
 	int (*mon_stats_read)(struct device *dev, void *msc_partid, void *mon_val);
 };
 
+#if IS_ENABLED(CONFIG_QTI_MPAM_MSC)
 struct qcom_mpam_msc *qcom_msc_lookup(uint32_t msc_id);
 int msc_system_get_device_capability(uint32_t msc_id, void *arg1, void *arg2);
 int msc_system_get_partition(uint32_t msc_id, void *arg1, void *arg2);
@@ -65,6 +73,61 @@ int msc_system_reset_partition(uint32_t msc_id, void *arg1, void *arg2);
 int msc_system_mon_read_miss_info(uint32_t msc_id, void *arg1, void *arg2);
 int msc_system_mon_alloc_info(uint32_t msc_id, void *arg1, void *arg2);
 int msc_system_mon_config(uint32_t msc_id, void *arg1, void *arg2);
-int attach_dev(struct device *dev, struct qcom_mpam_msc *qcom_msc, uint32_t msc_type);
-void detach_dev(struct device *dev, struct qcom_mpam_msc *qcom_msc, uint32_t msc_type);
+int attach_mpam_msc(struct device *dev, struct qcom_mpam_msc *qcom_msc, uint32_t msc_type);
+void detach_mpam_msc(struct device *dev, struct qcom_mpam_msc *qcom_msc, uint32_t msc_type);
+#else
+
+static inline struct qcom_mpam_msc *qcom_msc_lookup(uint32_t msc_id)
+{
+	return NULL;
+}
+
+static inline int msc_system_get_device_capability(uint32_t msc_id, void *arg1, void *arg2)
+{
+	return -EINVAL;
+}
+
+static inline int msc_system_get_partition(uint32_t msc_id, void *arg1, void *arg2);
+{
+	return -EINVAL;
+}
+
+static inline int msc_system_set_partition(uint32_t msc_id, void *arg1, void *arg2);
+{
+	return -EINVAL;
+}
+
+static inline int msc_system_reset_partition(uint32_t msc_id, void *arg1, void *arg2);
+{
+	return -EINVAL;
+}
+
+static inline int msc_system_mon_read_miss_info(uint32_t msc_id, void *arg1, void *arg2);
+{
+	return -EINVAL;
+}
+
+static inline int msc_system_mon_alloc_info(uint32_t msc_id, void *arg1, void *arg2);
+{
+	return -EINVAL;
+}
+
+static inline int msc_system_mon_config(uint32_t msc_id, void *arg1, void *arg2);
+{
+	return -EINVAL;
+}
+
+static inline int attach_mpam_msc(struct device *dev, struct qcom_mpam_msc *qcom_msc,
+		uint32_t msc_type);
+{
+	return -EINVAL;
+}
+
+static inline void detach_mpam_msc(struct device *dev, struct qcom_mpam_msc *qcom_msc,
+		uint32_t msc_type);
+{
+}
+
+#endif
+
 #endif /* _QCOM_MPAM_MSC_H */

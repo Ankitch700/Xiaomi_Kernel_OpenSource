@@ -943,6 +943,7 @@ static int rproc_panic_handler(struct notifier_block *this,
 		dev_err(adsp->dev, "failed to update smem bits for D3 to D0\n");
 		goto done;
 	}
+
 	ret = rproc_config_check_atomic(adsp, SOCCP_D0);
 	if (ret)
 		dev_err(adsp->dev, "failed to change to D0\n");

@@ -3238,6 +3238,9 @@ int gpi_q2spi_terminate_all(struct dma_chan *chan)
 				goto terminate_exit;
 			}
 		}
+	} else {
+		for (i = schid; i < echid; i++)
+			gpi_noop_tre(gpii_chan);
 	}
 
 	/* restart the channels */

@@ -1159,7 +1159,6 @@ static int qcom_stats_remove(struct platform_device *pdev)
 	unregister_chrdev_region(drv->dev_no, 1);
 
 	debugfs_remove_recursive(drv->root);
-
 	return 0;
 }
 
@@ -1170,6 +1169,16 @@ static int qcom_stats_suspend(struct device *dev)
 	void __iomem *reg = NULL;
 	int i;
 	u32 stats_id = 0;
+
+	struct qcom_stats_cx_vote_info vote_info[MAX_DRV+1];
+	memset(vote_info, 0, (int)sizeof(struct qcom_stats_cx_vote_info)*(MAX_DRV+1));
+	cx_stats_get_ss_vote_info(MAX_DRV, vote_info);
+
+	printk("CXVT INFO(OWEN DRV):");
+	for(i = 0; i < MAX_DRV; i++){
+		printk(KERN_CONT "%02x|", vote_info[i].level);
+	}
+	printk(KERN_CONT "\n");
 
 	if (!subsystem_stats_debug_on)
 		return 0;
