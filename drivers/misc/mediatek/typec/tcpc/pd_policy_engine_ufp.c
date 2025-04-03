@@ -1,6 +1,16 @@
-// SPDX-License-Identifier: GPL-2.0
 /*
- * Copyright (c) 2020 MediaTek Inc.
+ * Copyright (C) 2020 Richtek Inc.
+ *
+ * Power Delivery Policy Engine for UFP
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License for more details.
  */
 
 #include "inc/pd_core.h"
@@ -64,7 +74,7 @@ void pe_ufp_vdm_attention_request_entry(
 	VDM_STATE_NORESP_CMD(pd_port);
 
 	switch (pd_port->mode_svid) {
-#if CONFIG_USB_PD_ALT_MODE
+#ifdef CONFIG_USB_PD_ALT_MODE
 	case USB_SID_DISPLAYPORT:
 		pd_dpm_ufp_send_dp_attention(pd_port);
 		break;
@@ -80,7 +90,7 @@ void pe_ufp_vdm_attention_request_entry(
  * ALT Mode
  */
 
-#if CONFIG_USB_PD_ALT_MODE
+#ifdef CONFIG_USB_PD_ALT_MODE
 
 void pe_ufp_vdm_dp_status_update_entry(struct pd_port *pd_port)
 {
@@ -98,7 +108,7 @@ void pe_ufp_vdm_dp_configure_entry(struct pd_port *pd_port)
  * SVMD/UVDM
  */
 
-#if CONFIG_USB_PD_CUSTOM_VDM
+#ifdef CONFIG_USB_PD_CUSTOM_VDM
 
 void pe_ufp_uvdm_recv_entry(struct pd_port *pd_port)
 {
@@ -109,6 +119,7 @@ void pe_ufp_uvdm_recv_entry(struct pd_port *pd_port)
 
 void pe_ufp_vdm_send_nak_entry(struct pd_port *pd_port)
 {
-	pd_dpm_ufp_send_svdm_nak(pd_port);
+	if (PD_VDO_CMD(pd_port->curr_vdm_hdr) != CMD_ATTENTION)
+		pd_dpm_ufp_send_svdm_nak(pd_port);
 	VDM_STATE_DPM_INFORMED(pd_port);
 }

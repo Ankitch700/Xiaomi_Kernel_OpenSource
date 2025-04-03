@@ -1,13 +1,23 @@
-// SPDX-License-Identifier: GPL-2.0
 /*
- * Copyright (c) 2020 MediaTek Inc.
+ * Copyright (C) 2020 Richtek Inc.
+ *
+ * Power Delivery Process Event For VCS
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License for more details.
  */
 
 #include "inc/pd_core.h"
 #include "inc/tcpci_event.h"
 #include "inc/pd_process_evt.h"
 
-#if CONFIG_USB_PD_VCONN_SWAP
+#ifdef CONFIG_USB_PD_VCONN_SWAP
 /* DPM Event reactions */
 
 DECL_PE_STATE_TRANSITION(PD_DPM_MSG_ACK) = {
@@ -17,7 +27,7 @@ DECL_PE_STATE_TRANSITION(PD_DPM_MSG_ACK) = {
 DECL_PE_STATE_REACTION(PD_DPM_MSG_ACK);
 
 /*
- * [BLOCK] Porcess PD Ctrl MSG
+ * [BLOCK] Process PD Ctrl MSG
  */
 
 static inline bool pd_process_ctrl_msg(
@@ -50,7 +60,7 @@ static inline bool pd_process_ctrl_msg(
 }
 
 /*
- * [BLOCK] Porcess DPM MSG
+ * [BLOCK] Process DPM MSG
  */
 
 static inline bool pd_process_dpm_msg(
@@ -71,7 +81,7 @@ static inline bool pd_process_dpm_msg(
 }
 
 /*
- * [BLOCK] Porcess Timer MSG
+ * [BLOCK] Process Timer MSG
  */
 
 static inline bool pd_process_timer_msg(

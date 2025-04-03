@@ -32,9 +32,13 @@
 #undef pr_fmt
 #endif
 #define pr_fmt(fmt) "[cpudvfs]: " fmt
-
+/* N6 code for HQ-312741 by p-gaobowei at 2023/8/10 start */
+#define CPU_MAXFREQ_INDEX 7
+/* N6 code for HQ-312741 by p-gaobowei at 2023/8/10 end */
 u32 *g_cpufreq_debug;
-
+/* N6 code for HQ-304392 by p-gaobowei at 2023/7/18 start */
+u32 *g_cpumaxfreq;
+/* N6 code for HQ-304392 by p-gaobowei at 2023/7/18 end */
 unsigned int cpufreq_debug_cpu;
 static int cpufreq_debug_proc_show(struct seq_file *m, void *v)
 {
@@ -154,6 +158,53 @@ static int create_cpufreq_debug_fs(void)
 	return 0;
 }
 
+/* N6 code for HQ-304392 by p-gaobowei at 2023/7/18 start */
+static int cpumaxfreq_proc_show(struct seq_file *m, void *v)
+{
+	struct cpufreq_policy *policy = NULL;
+	if (cpufreq_debug_cpu >= 8) {
+		seq_printf(m, "cpu%u is invalid!\n", cpufreq_debug_cpu);
+		return 0;
+	}
+	/* N6 code for HQ-312741 by p-gaobowei at 2023/8/10 start */
+	policy = cpufreq_cpu_get(CPU_MAXFREQ_INDEX);
+	if (policy == NULL) {
+		seq_printf(m, "policy of cpu%u is null!\n", cpufreq_debug_cpu);
+		return 0;
+	}
+	pr_info("%s, max_freq=%d\n", __func__, policy->cpuinfo.max_freq);
+	seq_printf(m, "%lu.%lu\n", ((policy->cpuinfo.max_freq)/10000)/100,((policy->cpuinfo.max_freq)/100000%10));
+	/* N6 code for HQ-312741 by p-gaobowei at 2023/8/10 end */
+	cpufreq_cpu_put(policy);
+	return 0;
+}
+
+PROC_FOPS_RO(cpumaxfreq);
+
+static int create_cpumaxfreq_fs(void)
+{
+	int i = 0;
+
+	struct pentry {
+		const char *name;
+		const struct proc_ops *fops;
+		void *data;
+	};
+
+	const struct pentry entries[] = {
+		PROC_ENTRY_DATA(cpumaxfreq),
+	};
+
+	/* create /proc/cpumaxfreq */
+	for (i = 0; i < ARRAY_SIZE(entries); i++) {
+		if (!proc_create_data(entries[i].name, 0444, NULL, entries[i].fops, NULL))
+			pr_info("%s(), create /proc/%s failed\n",
+						__func__, entries[0].name);
+	}
+	return 0;
+}
+/* N6 code for HQ-304392 by p-gaobowei at 2023/7/18 end */
+
 static int mtk_cpudvfs_init(void)
 {
 	int ret = 0;
@@ -171,7 +222,9 @@ static int mtk_cpudvfs_init(void)
 		pr_info("failed to find pdev @ %s\n", __func__);
 		return -EINVAL;
 	}
-
+/* N6 code for HQ-304392 by p-gaobowei at 2023/7/18 start */
+	create_cpumaxfreq_fs();
+/* N6 code for HQ-304392 by p-gaobowei at 2023/7/18 end */
 	create_cpufreq_debug_fs();
 #ifdef EEM_DBG_LITE
 	ret = mtk_eem_init(pdev);

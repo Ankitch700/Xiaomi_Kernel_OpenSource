@@ -105,6 +105,14 @@ static struct scp_reserve_mblock scp_reserve_mblock[] = {
 		.start_virt = 0x0,
 		.size = 0x0,
 	},
+/* BSP.AUDIO - 2023.07.13 - modify to bring up UltraSound Sensor start*/
+	{
+		.num = SCP_ELLIPTIC_DEBUG_MEM,
+		.start_phys = 0x0,
+		.start_virt = 0x0,
+		.size = 0x0,
+	},
+/* BSP.AUDIO - 2023.07.13 - modify to bring up UltraSound Sensor end*/
 };
 
 

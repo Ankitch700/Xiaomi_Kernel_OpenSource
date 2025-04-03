@@ -16,7 +16,6 @@
 #include <linux/pm_runtime.h>
 #include <linux/workqueue.h>
 #include <linux/kthread.h>
-#include <linux/cpu.h>
 #include <linux/version.h>
 #include <uapi/linux/sched/types.h>
 #include <linux/sched/clock.h>
@@ -54,11 +53,13 @@ struct rt1711_chip {
 	struct wakeup_source *irq_wake_lock;
 
 	atomic_t poll_count;
-	struct delayed_work	poll_work;
 
 	int irq_gpio;
 	int irq;
 	int chip_id;
+	//sc6601 patch
+	uint16_t chip_pid;
+	uint16_t chip_vid;
 };
 
 #if IS_ENABLED(CONFIG_RT_REGMAP)
@@ -179,7 +180,7 @@ static int rt1711_read_device(void *client, u32 reg, int len, void *dst)
 		t1 = local_clock();
 		ret = i2c_smbus_read_i2c_block_data(i2c, reg, len, dst);
 		t2 = local_clock();
-		RT1711_INFO("%s del = %lluus, reg = %02X, len = %d\n",
+		RT1711_INFO("%s del = %lluus, reg = 0x%02X, len = %d\n",
 			    __func__, (t2 - t1) / NSEC_PER_USEC, reg, len);
 		if (ret < 0 && count > 1)
 			count--;
@@ -200,7 +201,7 @@ static int rt1711_write_device(void *client, u32 reg, int len, const void *src)
 		t1 = local_clock();
 		ret = i2c_smbus_write_i2c_block_data(i2c, reg, len, src);
 		t2 = local_clock();
-		RT1711_INFO("%s del = %lluus, reg = %02X, len = %d\n",
+		RT1711_INFO("%s del = %lluus, reg = 0x%02X, len = %d\n",
 			    __func__, (t2 - t1) / NSEC_PER_USEC, reg, len);
 		if (ret < 0 && count > 1)
 			count--;
@@ -400,6 +401,16 @@ static inline int rt1711_software_reset(struct tcpc_device *tcpc)
 	return 0;
 }
 
+static int rt1711_pd_reset(struct tcpc_device *tcpc)
+{
+	int ret = rt1711_i2c_write8(tcpc, RT1711H_REG_SWRESET, 1);
+	pr_err("rt1711_pd_reset\n");
+		if (ret < 0)
+			return ret;
+
+	return ret;
+}
+
 static inline int rt1711_command(struct tcpc_device *tcpc, uint8_t cmd)
 {
 	return rt1711_i2c_write8(tcpc, TCPC_V10_REG_COMMAND, cmd);
@@ -505,19 +516,6 @@ static int rt1711_init_rt_mask(struct tcpc_device *tcpc)
 	return rt1711_i2c_write8(tcpc, RT1711H_REG_RT_MASK, rt_mask);
 }
 
-static inline void rt1711_poll_ctrl(struct rt1711_chip *chip)
-{
-	cancel_delayed_work_sync(&chip->poll_work);
-
-	if (atomic_read(&chip->poll_count) == 0) {
-		atomic_inc(&chip->poll_count);
-		cpu_idle_poll_ctrl(true);
-	}
-
-	schedule_delayed_work(
-		&chip->poll_work, msecs_to_jiffies(40));
-}
-
 static void rt1711_irq_work_handler(struct kthread_work *work)
 {
 	struct rt1711_chip *chip =
@@ -525,7 +523,6 @@ static void rt1711_irq_work_handler(struct kthread_work *work)
 	int regval = 0;
 	int gpio_val;
 
-	rt1711_poll_ctrl(chip);
 	/* make sure I2C bus had resumed */
 	down(&chip->suspend_lock);
 	tcpci_lock_typec(chip->tcpc);
@@ -547,15 +544,6 @@ static void rt1711_irq_work_handler(struct kthread_work *work)
 #if DEBUG_GPIO
 	gpio_set_value(DEBUG_GPIO, 1);
 #endif
-}
-
-static void rt1711_poll_work(struct work_struct *work)
-{
-	struct rt1711_chip *chip = container_of(
-		work, struct rt1711_chip, poll_work.work);
-
-	if (atomic_dec_and_test(&chip->poll_count))
-		cpu_idle_poll_ctrl(false);
 }
 
 static irqreturn_t rt1711_intr_handler(int irq, void *data)
@@ -582,6 +570,13 @@ static int rt1711_init_alert(struct tcpc_device *tcpc)
 	/* Clear Alert Mask & Status */
 	rt1711_write_word(chip->client, TCPC_V10_REG_ALERT_MASK, 0);
 	rt1711_write_word(chip->client, TCPC_V10_REG_ALERT, 0xffff);
+
+	//sc6601 patch clear intr
+	if (chip->chip_vid == SOUTHCHIP_PD_VID) {
+		rt1711_reg_write(chip->client, RT1711H_REG_RT_MASK, 0);
+		rt1711_reg_write(chip->client, RT1711H_REG_RT_INT, 0xff);
+		rt1711_reg_write(chip->client, TCPC_V10_REG_FAULT_STATUS, 0xff);
+	}
 
 	len = strlen(chip->tcpc_desc->name);
 	name = devm_kzalloc(chip->dev, len+5, GFP_KERNEL);
@@ -737,6 +732,27 @@ static inline int rt1711h_init_cc_params(
 	return rv;
 }
 
+static int rt1711_get_chip_id(struct tcpc_device *tcpc,uint32_t *chip_id) 
+{
+	struct rt1711_chip *chip = tcpc_get_dev_data(tcpc);
+	*chip_id = chip->chip_id;
+	return 0;
+}
+
+static int rt1711_get_chip_pid(struct tcpc_device *tcpc,uint32_t *chip_pid) 
+{
+	struct rt1711_chip *chip = tcpc_get_dev_data(tcpc);
+	*chip_pid = chip->chip_pid;
+	return 0;
+}
+
+static int rt1711_get_chip_vid(struct tcpc_device *tcpc,uint32_t *chip_vid) 
+{
+	struct rt1711_chip *chip = tcpc_get_dev_data(tcpc);
+	*chip_vid = chip->chip_vid;
+	return 0;
+}
+
 static int rt1711_tcpc_init(struct tcpc_device *tcpc, bool sw_reset)
 {
 	int ret;
@@ -766,6 +782,12 @@ static int rt1711_tcpc_init(struct tcpc_device *tcpc, bool sw_reset)
 		rt1711_i2c_write8(tcpc, TCPC_V10_REG_FAULT_CTRL,
 			TCPC_V10_REG_FAULT_CTRL_DIS_VCONN_OV);
 	}
+
+	//sc6601 patch   cc logci vbus-detect default close, need open
+	if (chip->chip_vid == SOUTHCHIP_PD_VID) {
+		rt1711_i2c_write8(tcpc, TCPC_V10_REG_COMMAND,
+			TCPM_CMD_ENABLE_VBUS_DETECT);
+ 	}
 
 	/*
 	 * CC Detect Debounce : 26.7*val us
@@ -823,12 +845,17 @@ static inline int rt1711_fault_status_vconn_ov(struct tcpc_device *tcpc)
 	return rt1711_i2c_write8(tcpc, RT1711H_REG_BMC_CTRL, ret);
 }
 
+static int rt1711_set_vconn(struct tcpc_device *tcpc, int enable); //sc6601 patch, unlink vconn-cc after vconn OC trigger
 int rt1711_fault_status_clear(struct tcpc_device *tcpc, uint8_t status)
 {
 	int ret;
 
 	if (status & TCPC_V10_REG_FAULT_STATUS_VCONN_OV)
 		ret = rt1711_fault_status_vconn_ov(tcpc);
+
+	//sc6601 patch
+	if (status & TCPC_V10_REG_FAULT_STATUS_VCONN_OC)
+		ret = rt1711_set_vconn(tcpc, false);
 
 	rt1711_i2c_write8(tcpc, TCPC_V10_REG_FAULT_STATUS, status);
 	return 0;
@@ -924,6 +951,7 @@ static int rt1711_get_cc(struct tcpc_device *tcpc, int *cc1, int *cc2)
 {
 	int status, role_ctrl, cc_role;
 	bool act_as_sink, act_as_drp;
+	struct rt1711_chip *chip = tcpc_get_dev_data(tcpc); //SC6601 patch
 
 	status = rt1711_i2c_read8(tcpc, TCPC_V10_REG_CC_STATUS);
 	if (status < 0)
@@ -947,7 +975,10 @@ static int rt1711_get_cc(struct tcpc_device *tcpc, int *cc1, int *cc2)
 	if (act_as_drp) {
 		act_as_sink = TCPC_V10_REG_CC_STATUS_DRP_RESULT(status);
 	} else {
-		cc_role =  TCPC_V10_REG_CC_STATUS_CC1(role_ctrl);
+		if (tcpc->typec_polarity)
+			cc_role = TCPC_V10_REG_CC_STATUS_CC2(role_ctrl);
+		else
+			cc_role = TCPC_V10_REG_CC_STATUS_CC1(role_ctrl);
 		if (cc_role == TYPEC_CC_RP)
 			act_as_sink = false;
 		else
@@ -958,6 +989,17 @@ static int rt1711_get_cc(struct tcpc_device *tcpc, int *cc1, int *cc2)
 	 * If status is not open, then OR in termination to convert to
 	 * enum tcpc_cc_voltage_status.
 	 */
+
+	//SC6601 patch
+	if(chip->chip_vid == SOUTHCHIP_PD_VID && act_as_drp &&
+			act_as_sink) {
+		if ((*cc1+*cc2) > (2 * TYPEC_CC_VOLT_RA)) {
+			if (*cc1 == TYPEC_CC_VOLT_RA)
+				*cc1 = TYPEC_CC_VOLT_OPEN;
+			if (*cc2 == TYPEC_CC_VOLT_RA)
+				*cc2 = TYPEC_CC_VOLT_OPEN;
+		}
+	}
 
 	if (*cc1 != TYPEC_CC_VOLT_OPEN)
 		*cc1 |= (act_as_sink << 2);
@@ -991,18 +1033,32 @@ static int rt1711_enable_vsafe0v_detect(
 
 static int rt1711_set_cc(struct tcpc_device *tcpc, int pull)
 {
-	int ret;
-	uint8_t data;
+	/* N6 code for HQ-307388 by yeyinzi at 20230718 start */
+	int ret = 0;
+	uint8_t data =0, old_data = 0;
 	int rp_lvl = TYPEC_CC_PULL_GET_RP_LVL(pull), pull1, pull2;
+	struct rt1711_chip *chip = tcpc_get_dev_data(tcpc);
 
-	RT1711_INFO("\n");
+	RT1711_INFO("pull = 0x%02X\n", pull);
 	pull = TYPEC_CC_PULL_GET_RES(pull);
-	if (pull == TYPEC_CC_DRP) {
-		data = TCPC_V10_REG_ROLE_CTRL_RES_SET(
-				1, rp_lvl, TYPEC_CC_RD, TYPEC_CC_RD);
 
-		ret = rt1711_i2c_write8(
-			tcpc, TCPC_V10_REG_ROLE_CTRL, data);
+	if (chip->chip_vid == SOUTHCHIP_PD_VID)
+		old_data = rt1711_i2c_read8(tcpc, TCPC_V10_REG_ROLE_CTRL);
+
+	if (pull == TYPEC_CC_DRP) {
+	/* N6 code for HQ-307388 by yeyinzi at 20230721 start */
+		if (chip->chip_vid == SOUTHCHIP_PD_VID)
+			data = TCPC_V10_REG_ROLE_CTRL_RES_SET(
+					1, rp_lvl, TYPEC_CC_RP, TYPEC_CC_RP);
+		else
+			data = TCPC_V10_REG_ROLE_CTRL_RES_SET(
+					1, rp_lvl, TYPEC_CC_RD, TYPEC_CC_RD);
+	/* N6 code for HQ-307388 by yeyinzi at 20230721 end */
+
+		if (old_data != data || chip->chip_vid != SOUTHCHIP_PD_VID) {
+			ret = rt1711_i2c_write8(tcpc, TCPC_V10_REG_ROLE_CTRL, data);
+		}
+	/* N6 code for HQ-307388 by yeyinzi at 20230718 end */
 
 		if (ret == 0) {
 #if CONFIG_TCPC_VSAFE0V_DETECT_IC
@@ -1027,7 +1083,11 @@ static int rt1711_set_cc(struct tcpc_device *tcpc, int pull)
 				pull2 = TYPEC_CC_OPEN;
 		}
 		data = TCPC_V10_REG_ROLE_CTRL_RES_SET(0, rp_lvl, pull1, pull2);
-		ret = rt1711_i2c_write8(tcpc, TCPC_V10_REG_ROLE_CTRL, data);
+		/* N6 code for HQ-307388 by yeyinzi at 20230718 start */
+		if (old_data != data || chip->chip_vid != SOUTHCHIP_PD_VID) {
+			ret = rt1711_i2c_write8(tcpc, TCPC_V10_REG_ROLE_CTRL, data);
+		}
+		/* N6 code for HQ-307388 by yeyinzi at 20230718 end */
 	}
 
 	return 0;
@@ -1141,9 +1201,7 @@ int rt1711h_set_intrst(struct tcpc_device *tcpc, bool en)
 
 static int rt1711_tcpc_deinit(struct tcpc_device *tcpc)
 {
-#if IS_ENABLED(CONFIG_RT_REGMAP)
 	struct rt1711_chip *chip = tcpc_get_dev_data(tcpc);
-#endif /* CONFIG_RT_REGMAP */
 
 #if CONFIG_TCPC_SHUTDOWN_CC_DETACH
 	rt1711_set_cc(tcpc, TYPEC_CC_DRP);
@@ -1156,6 +1214,11 @@ static int rt1711_tcpc_deinit(struct tcpc_device *tcpc)
 	rt1711_i2c_write8(tcpc,
 		RT1711H_REG_INTRST_CTRL,
 		RT1711H_REG_INTRST_SET(true, 0));
+
+	if (chip->chip_vid == SOUTHCHIP_PD_VID) {
+		mdelay(150);
+		rt1711_i2c_write8(tcpc, RT1711H_REG_SWRESET, 1);
+	}
 #else
 	rt1711_i2c_write8(tcpc, RT1711H_REG_SWRESET, 1);
 #endif	/* CONFIG_TCPC_SHUTDOWN_CC_DETACH */
@@ -1276,6 +1339,12 @@ static int rt1711_transmit(struct tcpc_device *tcpc,
 		if (data_cnt > 0)
 			memcpy(packet.data, (uint8_t *) data, data_cnt);
 
+		/* N6 code for HQ-307388 by yeyinzi at 20230718 start */
+		if (chip->chip_vid == SOUTHCHIP_PD_VID) {
+			packet.cnt += 4;
+		}
+		/* N6 code for HQ-307388 by yeyinzi at 20230718 end */
+
 		rv = rt1711_block_write(chip->client,
 				TCPC_V10_REG_TX_BYTE_CNT,
 				packet.cnt+1, (uint8_t *) &packet);
@@ -1319,6 +1388,10 @@ static struct tcpc_ops rt1711_tcpc_ops = {
 	.set_vconn = rt1711_set_vconn,
 	.deinit = rt1711_tcpc_deinit,
 
+	//sc6601 patch
+	.get_chip_id = rt1711_get_chip_id,
+	.get_chip_vid = rt1711_get_chip_vid,
+	.get_chip_pid = rt1711_get_chip_pid,
 #if CONFIG_TCPC_LOW_POWER_MODE
 	.is_low_power_mode = rt1711_is_low_power_mode,
 	.set_low_power_mode = rt1711_set_low_power_mode,
@@ -1345,35 +1418,23 @@ static struct tcpc_ops rt1711_tcpc_ops = {
 #if CONFIG_USB_PD_RETRY_CRC_DISCARD
 	.retransmit = rt1711_retransmit,
 #endif	/* CONFIG_USB_PD_RETRY_CRC_DISCARD */
+	.pd_reset = rt1711_pd_reset,
 };
 
 static int rt_parse_dt(struct rt1711_chip *chip, struct device *dev)
 {
-	struct device_node *np = NULL;
+	struct device_node *np = dev->of_node;
 	int ret = 0;
 
 	pr_info("%s\n", __func__);
 
-	np = of_find_node_by_name(NULL, "rt1711_type_c_port0");
-	if (!np) {
-		pr_notice("%s find node rt1711_type_c_port0 fail\n", __func__);
-		return -ENODEV;
-	}
-	dev->of_node = np;
-
-#if IS_ENABLED(CONFIG_MTK_GPIO) || IS_ENABLED(CONFIG_MTK_GPIOLIB_STAND)
 	ret = of_get_named_gpio(np, "rt1711pd,intr_gpio", 0);
 	if (ret < 0) {
 		pr_err("%s no intr_gpio info\n", __func__);
 		return ret;
 	}
 	chip->irq_gpio = ret;
-#else
-	ret = of_property_read_u32(np,
-		"rt1711pd,intr_gpio_num", &chip->irq_gpio);
-	if (ret < 0)
-		pr_err("%s no intr_gpio info\n", __func__);
-#endif
+
 	return ret < 0 ? ret : 0;
 }
 
@@ -1513,8 +1574,8 @@ static int rt1711_tcpcdev_init(struct rt1711_chip *chip, struct device *dev)
 		chip->tcpc->tcpc_flags |= TCPC_FLAGS_RETRY_CRC_DISCARD;
 #endif  /* CONFIG_USB_PD_RETRY_CRC_DISCARD */
 
-#if CONFIG_USB_PD_REV30
-	if (chip->chip_id >= RT1715_DID_D)
+#if CONFIG_USB_PD_REV30 //sc6601 patch
+	if ((chip->chip_id >= RT1715_DID_D) || ( chip->chip_vid == SOUTHCHIP_PD_VID))
 		chip->tcpc->tcpc_flags |= TCPC_FLAGS_PD_REV30;
 
 	if (chip->tcpc->tcpc_flags & TCPC_FLAGS_PD_REV30)
@@ -1542,7 +1603,7 @@ static inline int rt1711h_check_revision(struct i2c_client *client)
 		return -EIO;
 	}
 
-	if (vid != RICHTEK_1711_VID) {
+	if ((vid != RICHTEK_1711_VID) && (vid != SOUTHCHIP_PD_VID)) { //sc6601 patch
 		pr_info("%s failed, VID=0x%04x\n", __func__, vid);
 		return -ENODEV;
 	}
@@ -1553,7 +1614,7 @@ static inline int rt1711h_check_revision(struct i2c_client *client)
 		return -EIO;
 	}
 
-	if (pid != RICHTEK_1711_PID) {
+	if ((pid != RICHTEK_1711_PID) && (pid != SC2150A_PID) && (pid != SC6601_PID)) {//sc6601 patch
 		pr_info("%s failed, PID=0x%04x\n", __func__, pid);
 		return -ENODEV;
 	}
@@ -1578,6 +1639,7 @@ static int rt1711_i2c_probe(struct i2c_client *client,
 {
 	struct rt1711_chip *chip;
 	int ret = 0, chip_id;
+	u16 chip_pid, chip_vid; //sc6601 patch
 	bool use_dt = client->dev.of_node;
 
 	pr_info("%s (%s)\n", __func__, RT1711H_DRV_VERSION);
@@ -1590,6 +1652,10 @@ static int rt1711_i2c_probe(struct i2c_client *client,
 	chip_id = rt1711h_check_revision(client);
 	if (chip_id < 0)
 		return chip_id;
+
+	//sc6601 patch
+	rt1711_read_device(client, TCPC_V10_REG_PID, 2, &chip_pid);
+	rt1711_read_device(client, TCPC_V10_REG_VID, 2, &chip_vid);
 
 #if TCPC_ENABLE_ANYMSG
 	check_printk_performance();
@@ -1612,12 +1678,13 @@ static int rt1711_i2c_probe(struct i2c_client *client,
 	sema_init(&chip->io_lock, 1);
 	sema_init(&chip->suspend_lock, 1);
 	i2c_set_clientdata(client, chip);
-	INIT_DELAYED_WORK(&chip->poll_work, rt1711_poll_work);
 	chip->irq_wake_lock =
 		wakeup_source_register(chip->dev, "rt1711h_irq_wake_lock");
 
 	chip->chip_id = chip_id;
-	pr_info("rt1711h_chipID = 0x%0x\n", chip_id);
+	chip->chip_pid = chip_pid; //sc6601 patch
+	chip->chip_vid = chip_vid;
+	pr_info("rt1711h_chipID = 0x%0x, PID = 0x%0x, VID =0x%0x\n", chip_id, chip_pid, chip_vid); //sc6601 patch
 
 	ret = rt1711_regmap_init(chip);
 	if (ret < 0) {
@@ -1655,8 +1722,6 @@ static int rt1711_i2c_remove(struct i2c_client *client)
 	struct rt1711_chip *chip = i2c_get_clientdata(client);
 
 	if (chip) {
-		cancel_delayed_work_sync(&chip->poll_work);
-
 		tcpc_device_unregister(chip->dev, chip->tcpc);
 		rt1711_regmap_deinit(chip);
 	}
@@ -1749,12 +1814,13 @@ MODULE_DEVICE_TABLE(i2c, rt1711_id_table);
 
 static const struct of_device_id rt_match_table[] = {
 	{.compatible = "mediatek,usb_type_c",},
+	{.compatible = "richtek,rt1711h",},
 	{},
 };
 
 static struct i2c_driver rt1711_driver = {
 	.driver = {
-		.name = "usb_type_c",
+		.name = "rt1711h",
 		.owner = THIS_MODULE,
 		.of_match_table = rt_match_table,
 		.pm = RT1711_PM_OPS,
@@ -1770,11 +1836,9 @@ static int __init rt1711_init(void)
 	struct device_node *np;
 
 	pr_info("%s (%s): initializing...\n", __func__, RT1711H_DRV_VERSION);
-	np = of_find_node_by_name(NULL, "usb_type_c");
-	if (np != NULL)
-		pr_info("usb_type_c node found...\n");
-	else
-		pr_info("usb_type_c node not found...\n");
+	np = of_find_node_by_name(NULL, "rt1711h");
+	pr_info("%s rt1711h node %s\n", __func__,
+		np == NULL ? "not found" : "found");
 
 	return i2c_add_driver(&rt1711_driver);
 }

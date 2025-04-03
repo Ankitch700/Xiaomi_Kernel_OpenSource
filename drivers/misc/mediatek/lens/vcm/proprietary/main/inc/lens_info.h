@@ -65,6 +65,21 @@
 #define AFDRV_OV8825AF "OV8825AF"
 #define AFDRV_WV511AAF "WV511AAF"
 #define AFDRV_DW9718TAF "DW9718TAF"
+/*N6 code for HQ-306077 by HQ camera at 20230712 start*/
+#define AFDRV_EMERALD_DW9800VAF "EMERALD_DW9800VAF"
+/*N6 code for HQ-306077 by HQ camera at 20230712 end*/
+
+/*N6 code for HQ-306051 by huabinchen at 20230711 start*/
+#define AFDRV_EMERALD_GT9764VAF "EMERALD_GT9764VAF"
+/*N6 code for HQ-306051 by huabinchen at 20230711 end*/
+
+/*N6 code for HQ-314256 by hudongjiao at 20230814 start*/
+#define AFDRV_EMERALD_GT9764BAVAF "EMERALD_GT9764BAVAF"
+/*N6 code for HQ-314256 by hudongjiao at 20230814 end*/
+
+/*N6 code for HQ-336394 by wangjie at 20231016 start*/
+#define AFDRV_EMERALD_AK7314AF "EMERALD_AK7314AF"
+/*N6 code for HQ-336394 by wangjie at 20231016 end*/
 
 #define CONVERT_CCU_TIMESTAMP 0x1000
 

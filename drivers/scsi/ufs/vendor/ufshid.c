@@ -36,7 +36,7 @@
  * license terms, and distributes only under these terms.
  */
 
-#include "ufshcd.h"
+#include "../ufshcd.h"
 #include "ufsfeature.h"
 #include "ufshid.h"
 

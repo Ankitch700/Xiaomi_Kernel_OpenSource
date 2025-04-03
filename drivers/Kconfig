@@ -235,4 +235,8 @@ source "drivers/interconnect/Kconfig"
 source "drivers/counter/Kconfig"
 
 source "drivers/most/Kconfig"
+
+# BSP.AUDIO - 2023.07.18 - modify to Headphone node start
+source "drivers/switch/Kconfig"
+# BSP.AUDIO - 2023.07.18 - modify to Headphone node end
 endmenu

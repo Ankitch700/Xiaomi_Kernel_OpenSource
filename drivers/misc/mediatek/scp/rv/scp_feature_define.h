@@ -109,6 +109,13 @@ enum scp_sensor_id {
 	GYRO_SECONDARY_FEATURE_ID,
 	FLICKER_REAR_FEATURE_ID,
 	RGBW_REAR_FEATURE_ID,
+/* BSP.AUDIO - 2023.07.13 - modify to bring up UltraSound Sensor start*/
+	ELLIPTIC_FUSION_ID,
+/* BSP.AUDIO - 2023.07.13 - modify to bring up UltraSound Sensor end*/
+/*N6 code for sar by songguixin at 2023/06/27 start*/
+	SAR_ALGO_ID,
+	SAR_ALGO_1_ID,
+/*N6 code for sar by songguixin at 2023/06/27 end*/
 	NUM_SENSOR_TYPE,
 };
 

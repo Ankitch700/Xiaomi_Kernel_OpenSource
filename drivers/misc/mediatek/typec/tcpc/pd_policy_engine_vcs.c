@@ -1,7 +1,18 @@
-// SPDX-License-Identifier: GPL-2.0
 /*
- * Copyright (c) 2020 MediaTek Inc.
+ * Copyright (C) 2020 Richtek Inc.
+ *
+ * Power Delivery Policy Engine for VCS
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License for more details.
  */
+
 #include "inc/pd_core.h"
 #include "inc/pd_dpm_core.h"
 #include "inc/tcpci.h"
@@ -44,8 +55,8 @@ void pe_vcs_turn_off_vconn_entry(struct pd_port *pd_port)
 
 void pe_vcs_turn_on_vconn_entry(struct pd_port *pd_port)
 {
-#if CONFIG_USB_PD_REV30
-#if CONFIG_USB_PD_RESET_CABLE
+#ifdef CONFIG_USB_PD_REV30
+#ifdef CONFIG_USB_PD_RESET_CABLE
 	dpm_reaction_set(pd_port, DPM_REACTION_CAP_RESET_CABLE);
 #endif	/* CONFIG_USB_PD_RESET_CABLE */
 #endif	/* CONFIG_USB_PD_REV30 */

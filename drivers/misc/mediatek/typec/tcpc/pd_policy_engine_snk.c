@@ -1,6 +1,16 @@
-// SPDX-License-Identifier: GPL-2.0
 /*
- * Copyright (c) 2020 MediaTek Inc.
+ * Copyright (C) 2020 Richtek Inc.
+ *
+ * Power Delivery Policy Engine for SNK
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License for more details.
  */
 
 #include "inc/pd_core.h"
@@ -17,7 +27,7 @@ void pe_snk_startup_entry(struct pd_port *pd_port)
 	uint8_t rx_cap = PD_RX_CAP_PE_STARTUP;
 	bool pr_swap = pd_port->state_machine == PE_STATE_MACHINE_PR_SWAP;
 
-#if CONFIG_USB_PD_IGNORE_PS_RDY_AFTER_PR_SWAP
+#ifdef CONFIG_USB_PD_IGNORE_PS_RDY_AFTER_PR_SWAP
 	uint8_t msg_id_last = pd_port->pe_data.msg_id_rx[TCPC_TX_SOP];
 #endif	/* CONFIG_USB_PD_IGNORE_PS_RDY_AFTER_PR_SWAP */
 
@@ -30,11 +40,10 @@ void pe_snk_startup_entry(struct pd_port *pd_port)
 		 */
 		rx_cap = PD_RX_CAP_PE_SEND_WAIT_CAP;
 
-#if CONFIG_USB_PD_IGNORE_PS_RDY_AFTER_PR_SWAP
+#ifdef CONFIG_USB_PD_IGNORE_PS_RDY_AFTER_PR_SWAP
 		pd_port->msg_id_pr_swap_last = msg_id_last;
 #endif	/* CONFIG_USB_PD_IGNORE_PS_RDY_AFTER_PR_SWAP */
 	}
-
 	pd_set_rx_enable(pd_port, rx_cap);
 	pd_put_pe_event(pd_port, PD_PE_RESET_PRL_COMPLETED);
 }
@@ -45,7 +54,7 @@ void pe_snk_discovery_entry(struct pd_port *pd_port)
 
 	if (pd_check_pe_during_hard_reset(pd_port)) {
 		wait_valid = false;
-		pd_enable_pe_state_timer(pd_port, PD_TIMER_PS_TRANSITION);
+		pd_enable_pe_state_timer(pd_port, PD_TIMER_HARD_RESET_SAFE0V);
 	}
 	pd_enable_vbus_valid_detection(pd_port, wait_valid);
 }
@@ -53,11 +62,9 @@ void pe_snk_discovery_entry(struct pd_port *pd_port)
 void pe_snk_wait_for_capabilities_entry(
 				struct pd_port *pd_port)
 {
-#if CONFIG_USB_PD_SNK_HRESET_KEEP_DRAW
 	/* Default current draw after HardReset */
-	if (pd_check_pe_during_hard_reset(pd_port))
-		pd_dpm_sink_vbus(pd_port, true);
-#endif	/* CONFIG_USB_PD_SNK_HRESET_KEEP_DRAW */
+	/*if (pd_check_pe_during_hard_reset(pd_port))
+		pd_dpm_sink_vbus(pd_port, true); */
 
 	pd_notify_pe_hard_reset_completed(pd_port);
 
@@ -73,8 +80,8 @@ void pe_snk_evaluate_capability_entry(struct pd_port *pd_port)
 	pd_handle_hard_reset_recovery(pd_port);
 	pd_handle_first_pd_command(pd_port);
 
-	pd_port->pe_data.explicit_contract = false;
 	pd_dpm_snk_evaluate_caps(pd_port);
+	pd_port->pe_data.explicit_contract = false;
 }
 
 void pe_snk_select_capability_entry(struct pd_port *pd_port)
@@ -85,12 +92,12 @@ void pe_snk_select_capability_entry(struct pd_port *pd_port)
 	PE_STATE_WAIT_MSG_HRESET_IF_TOUT(pd_port);
 
 	if (pd_event->event_type == PD_EVT_DPM_MSG) {
-		PE_DBG("SelectCap%d, rdo:0x%08x\n",
+		PE_INFO("SelectCap%d, rdo:0x%08x\n",
 			pd_event->msg_sec, pd_port->last_rdo);
 	} else {
 		/* new request, for debug only */
 		/* pd_dpm_sink_vbus(pd_port, false); */
-		PE_DBG("NewReq, rdo:0x%08x\n", pd_port->last_rdo);
+		PE_INFO("NewReq, rdo:0x%08x\n", pd_port->last_rdo);
 	}
 
 	/* Disable UART output for Sink SenderResponse */
@@ -102,16 +109,15 @@ void pe_snk_select_capability_entry(struct pd_port *pd_port)
 
 void pe_snk_select_capability_exit(struct pd_port *pd_port)
 {
-#if CONFIG_USB_PD_RENEGOTIATION_COUNTER
+#ifdef CONFIG_USB_PD_RENEGOTIATION_COUNTER
 	struct tcpc_device __maybe_unused *tcpc = pd_port->tcpc;
 #endif /* CONFIG_USB_PD_RENEGOTIATION_COUNTER */
 
 	if (pd_check_ctrl_msg_event(pd_port, PD_CTRL_ACCEPT)) {
-		pd_port->pe_data.remote_selected_cap =
-					RDO_POS(pd_port->last_rdo);
+		pd_port->pe_data.selected_cap = RDO_POS(pd_port->last_rdo);
 		pd_port->cap_miss_match = 0;
 	} else if (pd_check_ctrl_msg_event(pd_port, PD_CTRL_REJECT)) {
-#if CONFIG_USB_PD_RENEGOTIATION_COUNTER
+#ifdef CONFIG_USB_PD_RENEGOTIATION_COUNTER
 		if (pd_port->cap_miss_match == 0x01) {
 			PE_INFO("reset renegotiation cnt by cap mismatch\n");
 			pd_port->pe_data.renegotiation_count = 0;
@@ -130,7 +136,7 @@ void pe_snk_transition_sink_entry(struct pd_port *pd_port)
 {
 	pd_enable_pe_state_timer(pd_port, PD_TIMER_PS_TRANSITION);
 
-#if CONFIG_USB_PD_SNK_GOTOMIN
+#ifdef CONFIG_USB_PD_SNK_GOTOMIN
 	if (pd_check_ctrl_msg_event(pd_port, PD_CTRL_GOTO_MIN)) {
 		if (pd_port->dpm_caps & DPM_CAP_LOCAL_GIVE_BACK)
 			pd_port->request_i_new = pd_port->request_i_op;
@@ -151,6 +157,15 @@ void pe_snk_ready_entry(struct pd_port *pd_port)
 
 void pe_snk_hard_reset_entry(struct pd_port *pd_port)
 {
+#ifdef CONFIG_SUPPORT_SOUTHCHIP_PDPHY
+	int rv = 0;
+	uint32_t chip_vid = 0;
+ 	
+	rv = tcpci_get_chip_vid(pd_port->tcpc, &chip_vid);
+	if (!rv &&  SOUTHCHIP_PD_VID == chip_vid) {
+		pd_enable_timer(pd_port, PD_TIMER_HARD_RESET_COMPLETE);
+	}
+#endif /* CONFIG_SUPPORT_SOUTHCHIP_PDPHY */
 	pd_send_hard_reset(pd_port);
 }
 
@@ -169,7 +184,7 @@ void pe_snk_give_sink_cap_entry(struct pd_port *pd_port)
 
 void pe_snk_get_source_cap_entry(struct pd_port *pd_port)
 {
-#if CONFIG_USB_PD_TCPM_CB_2ND
+#ifdef CONFIG_USB_PD_TCPM_CB_2ND
 	PE_STATE_WAIT_MSG(pd_port);
 #else
 	PE_STATE_WAIT_TX_SUCCESS(pd_port);
@@ -190,8 +205,14 @@ void pe_snk_soft_reset_entry(struct pd_port *pd_port)
 
 /* ---- Policy Engine (PD30) ---- */
 
-#if CONFIG_USB_PD_REV30
+#ifdef CONFIG_USB_PD_REV30
 
+void pe_snk_give_sink_cap_ext_entry(struct pd_port *pd_port)
+{
+	PE_STATE_WAIT_TX_SUCCESS(pd_port);
+
+	pd_dpm_send_sink_cap_ext(pd_port);
+}
 /*
  * [PD3.0] Figure 8-71 Sink Port Not Supported Message State Diagram
  */
@@ -219,7 +240,7 @@ void pe_snk_chunk_received_entry(struct pd_port *pd_port)
  * [PD3.0] Figure 8-74 Sink Port Source Alert State Diagram
  */
 
-#if CONFIG_USB_PD_REV30_ALERT_REMOTE
+#ifdef CONFIG_USB_PD_REV30_ALERT_REMOTE
 void pe_snk_source_alert_received_entry(struct pd_port *pd_port)
 {
 	PE_STATE_DPM_INFORMED(pd_port);
@@ -232,10 +253,11 @@ void pe_snk_source_alert_received_entry(struct pd_port *pd_port)
  * [PD3.0] Figure 8-75 Sink Port Sink Alert State Diagram
  */
 
-#if CONFIG_USB_PD_REV30_ALERT_LOCAL
+#ifdef CONFIG_USB_PD_REV30_ALERT_LOCAL
 void pe_snk_send_sink_alert_entry(struct pd_port *pd_port)
 {
-	PE_STATE_WAIT_TX_SUCCESS(pd_port);
+	// PE_STATE_WAIT_TX_SUCCESS(pd_port);
+	PE_STATE_WAIT_MSG(pd_port);
 	pd_dpm_send_alert(pd_port);
 }
 #endif	/* CONFIG_USB_PD_REV30_ALERT_REMOTE */
@@ -244,7 +266,7 @@ void pe_snk_send_sink_alert_entry(struct pd_port *pd_port)
  * [PD3.0] Figure 8-77 Sink Port Get Source Capabilities Extended State Diagram
  */
 
-#if CONFIG_USB_PD_REV30_SRC_CAP_EXT_REMOTE
+#ifdef CONFIG_USB_PD_REV30_SRC_CAP_EXT_REMOTE
 void pe_snk_get_source_cap_ext_entry(struct pd_port *pd_port)
 {
 	PE_STATE_WAIT_MSG(pd_port);
@@ -262,7 +284,7 @@ void pe_snk_get_source_cap_ext_exit(struct pd_port *pd_port)
  * [PD3.0] Figure 8-79 Sink Port Get Source Status State Diagram
  */
 
-#if CONFIG_USB_PD_REV30_STATUS_REMOTE
+#ifdef CONFIG_USB_PD_REV30_STATUS_REMOTE
 void pe_snk_get_source_status_entry(struct pd_port *pd_port)
 {
 	PE_STATE_WAIT_MSG(pd_port);
@@ -280,7 +302,7 @@ void pe_snk_get_source_status_exit(struct pd_port *pd_port)
  * [PD3.0] Figure 8-82 Sink Give Sink Status State Diagram
  */
 
-#if CONFIG_USB_PD_REV30_STATUS_LOCAL
+#ifdef CONFIG_USB_PD_REV30_STATUS_LOCAL
 void pe_snk_give_sink_status_entry(struct pd_port *pd_port)
 {
 	PE_STATE_WAIT_TX_SUCCESS(pd_port);
@@ -293,7 +315,7 @@ void pe_snk_give_sink_status_entry(struct pd_port *pd_port)
  * [PD3.0] Figure 8-83 Sink Port Get Source PPS Status State Diagram
  */
 
-#if CONFIG_USB_PD_REV30_PPS_SINK
+#ifdef CONFIG_USB_PD_REV30_PPS_SINK
 void pe_snk_get_pps_status_entry(struct pd_port *pd_port)
 {
 	PE_STATE_WAIT_MSG(pd_port);

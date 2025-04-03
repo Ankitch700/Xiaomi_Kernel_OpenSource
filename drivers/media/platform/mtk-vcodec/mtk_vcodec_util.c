@@ -575,7 +575,9 @@ static void mtk_vcodec_sync_log(struct mtk_vcodec_dev *dev,
 			mtk_v4l2_debug(8, "remove deprecated key: %s, value: %s\n",
 				pram->param_key, pram->param_val);
 			list_del_init(&pram->list);
-			kfree(pram);
+			/* N6 code for HQ-312770 by wuxiaoqin at 2023/08/22 start */
+			vfree(pram);
+			/* N6 code for HQ-312770 by wuxiaoqin at 2023/08/22 end */
 		} else {
 			param_count++;
 		}
@@ -590,7 +592,9 @@ static void mtk_vcodec_sync_log(struct mtk_vcodec_dev *dev,
 	}
 
 	// cannot find, add new
-	pram = kzalloc(sizeof(*pram), GFP_KERNEL);
+	/* N6 code for HQ-312770 by wuxiaoqin at 2023/08/22 start */
+	pram = vzalloc(sizeof(*pram));
+	/* N6 code for HQ-312770 by wuxiaoqin at 2023/08/22 end */
 	strncpy(pram->param_key, param_key, LOG_PARAM_INFO_SIZE - 1);
 	strncpy(pram->param_val, param_val, LOG_PARAM_INFO_SIZE - 1);
 	pram->param_val[LOG_PARAM_INFO_SIZE-1] = '\0';
@@ -670,16 +674,29 @@ void mtk_vcodec_set_log(struct mtk_vcodec_dev *dev, const char *val,
 	enum mtk_vcodec_log_index log_index)
 {
 	int i, argc = 0;
-	char argv[MAX_SUPPORTED_LOG_PARAMS_COUNT * 2][LOG_PARAM_INFO_SIZE] = {0};
+	/* N6 code for HQ-312770 by wuxiaoqin at 2023/08/22 start */
+	char (*argv)[LOG_PARAM_INFO_SIZE] = NULL;
 	char *temp = NULL;
 	char *token = NULL;
 	long temp_val = 0;
-	char log[LOG_PROPERTY_SIZE] = {0};
+	char *log = NULL;
+	/* N6 code for HQ-312770 by wuxiaoqin at 2023/08/22 end */
 
 	if (val == NULL || strlen(val) == 0)
 		return;
 
 	mtk_v4l2_debug(0, "val: %s, log_index: %d", val, log_index);
+
+	/* N6 code for HQ-312770 by wuxiaoqin at 2023/08/22 start */
+	argv = vzalloc(MAX_SUPPORTED_LOG_PARAMS_COUNT * 2 * LOG_PARAM_INFO_SIZE);
+	if (!argv)
+		return;
+	log = vzalloc(LOG_PROPERTY_SIZE);
+	if (!log) {
+		vfree(argv);
+		return;
+	}
+	/* N6 code for HQ-312770 by wuxiaoqin at 2023/08/22 end */
 
 	strncpy(log, val, LOG_PROPERTY_SIZE - 1);
 	temp = log;
@@ -718,6 +735,11 @@ void mtk_vcodec_set_log(struct mtk_vcodec_dev *dev, const char *val,
 		pr_info("mtk_vcodec_perf: %d\n", mtk_vcodec_perf);
 		pr_info("mtk_v4l2_dbg_level: %d\n", mtk_v4l2_dbg_level);
 	}
+
+	/* N6 code for HQ-312770 by wuxiaoqin at 2023/08/22 start */
+	vfree(argv);
+	vfree(log);
+	/* N6 code for HQ-312770 by wuxiaoqin at 2023/08/22 end */
 }
 EXPORT_SYMBOL_GPL(mtk_vcodec_set_log);
 

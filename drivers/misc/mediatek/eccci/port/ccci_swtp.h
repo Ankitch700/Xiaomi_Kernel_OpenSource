@@ -9,7 +9,12 @@
 /* modify MAX_PIN_NUM/DTS to support more gpio,
  * need to follow SOP for customization.
  */
-#define MAX_PIN_NUM 5
+/* N6 code for HQ- 302160 by p-gaobowei at 2023/07/03 start */
+#define MAX_PIN_NUM 1
+
+#define KEY_TABLE0		249
+#define KEY_TABLE1		250
+/* N6 code for HQ- 302160 by p-gaobowei at 2023/07/03 end */
 #define SWTP_COMPATIBLE_DEVICE_ID "mediatek, swtp-eint"
 #define SWTP1_COMPATIBLE_DEVICE_ID "mediatek, swtp1-eint"
 #define SWTP2_COMPATIBLE_DEVICE_ID "mediatek, swtp2-eint"

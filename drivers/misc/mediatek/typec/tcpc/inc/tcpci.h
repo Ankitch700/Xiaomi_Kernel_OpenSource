@@ -1,6 +1,14 @@
-/* SPDX-License-Identifier: GPL-2.0 */
 /*
- * Copyright (c) 2020 MediaTek Inc.
+ * Copyright (C) 2020 Richtek Inc.
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License for more details.
  */
 
 #ifndef __LINUX_RT_TCPC_H
@@ -13,7 +21,10 @@
 #include <linux/err.h>
 #include <linux/cpu.h>
 #include <linux/delay.h>
-#include <linux/sched.h>
+
+#ifdef CONFIG_DUAL_ROLE_USB_INTF
+#include <linux/usb/class-dual-role.h>
+#endif /* CONFIG_DUAL_ROLE_USB_INTF */
 
 #include "tcpci_core.h"
 
@@ -25,18 +36,34 @@
 #include "pd_core.h"
 #endif /* CONFIG_USB_POWER_DELIVERY */
 
+#define SOUTHCHIP_PD_VER    0X3116
+
+/********************** product define *********************/
+#define SOUTHCHIP_PD_VID	0x311C
+#define SC2150_PID			0x2150
+#define SC2150A_DID			0x0000
+#define SC2150A_1P2_DID 	0x0001
+#define SC2150P_DID			0x0003
+
+#define SC660X_PID			0x6600
+#define SC660X_DID			0x0000
+/***********************************************************/
+
 #define PE_STATE_FULL_NAME	0
 
 #define TCPC_LOW_RP_DUTY		(100)		/* 10 % */
 #define TCPC_NORMAL_RP_DUTY	(330)		/* 33 % */
 
+/* N19A code for HQ-380111 by p-yanzelin at 20240423 start */
+#define NU6601_DID			0x6601
+/* N19A code for HQ-380111 by p-yanzelin at 20240423 end */
+
 /* provide to TCPC interface */
 extern int tcpci_report_usb_port_changed(struct tcpc_device *tcpc);
-extern int tcpci_set_wake_lock(
-	struct tcpc_device *tcpc, bool pd_lock, bool user_lock);
 extern int tcpci_report_power_control(struct tcpc_device *tcpc, bool en);
 extern int tcpc_typec_init(struct tcpc_device *tcpc, uint8_t typec_role);
 extern void tcpc_typec_deinit(struct tcpc_device *tcpc);
+extern int tcpc_dual_role_phy_init(struct tcpc_device *tcpc);
 
 extern struct tcpc_device *tcpc_device_register(
 		struct device *parent, struct tcpc_desc *tcpc_desc,
@@ -45,8 +72,6 @@ extern void tcpc_device_unregister(
 			struct device *dev, struct tcpc_device *tcpc);
 
 extern int tcpc_schedule_init_work(struct tcpc_device *tcpc);
-
-extern int tcpc_device_irq_enable(struct tcpc_device *tcpc);
 
 extern void *tcpc_get_dev_data(struct tcpc_device *tcpc);
 extern void tcpci_lock_typec(struct tcpc_device *tcpc);
@@ -62,12 +87,20 @@ static inline int tcpci_check_vbus_valid(struct tcpc_device *tcpc)
 }
 
 int tcpci_check_vbus_valid_from_ic(struct tcpc_device *tcpc);
-int tcpci_check_vsafe0v(struct tcpc_device *tcpc, bool detect_en);
+bool tcpci_check_vsafe0v(struct tcpc_device *tcpc);
 int tcpci_alert_status_clear(struct tcpc_device *tcpc, uint32_t mask);
 int tcpci_fault_status_clear(struct tcpc_device *tcpc, uint8_t status);
 int tcpci_set_alert_mask(struct tcpc_device *tcpc, uint32_t mask);
+#ifdef CONFIG_SUPPORT_SOUTHCHIP_PDPHY
+int tcpci_get_chip_id(struct tcpc_device *tcpc,uint32_t *chip_id);
+int tcpci_get_chip_pid(struct tcpc_device *tcpc,uint32_t *chip_pid);
+int tcpci_get_chip_vid(struct tcpc_device *tcpc,uint32_t *chip_vid);
+#endif /* CONFIG_SUPPORT_SOUTHCHIP_PDPHY */
 int tcpci_get_alert_mask(struct tcpc_device *tcpc, uint32_t *mask);
 int tcpci_get_alert_status(struct tcpc_device *tcpc, uint32_t *alert);
+/* N19A code for HQ-353528 by tangsufeng at 20231208 start */
+int tcpci_rx_busy_get_alert_status(struct tcpc_device *tcpc, uint32_t *alert);
+/* N19A code for HQ-353528 by tangsufeng at 20231208 end */
 int tcpci_get_fault_status(struct tcpc_device *tcpc, uint8_t *fault);
 int tcpci_get_power_status(struct tcpc_device *tcpc, uint16_t *pw_status);
 int tcpci_init(struct tcpc_device *tcpc, bool sw_reset);
@@ -75,41 +108,40 @@ int tcpci_init_alert_mask(struct tcpc_device *tcpc);
 
 int tcpci_get_cc(struct tcpc_device *tcpc);
 int tcpci_set_cc(struct tcpc_device *tcpc, int pull);
+static inline int __tcpci_set_cc(struct tcpc_device *tcpc, int pull)
+{
+	PD_BUG_ON(tcpc->ops->set_cc == NULL);
+  
+	if (pull & TYPEC_CC_DRP) {
+		tcpc->typec_remote_cc[0] =
+		tcpc->typec_remote_cc[1] =
+			TYPEC_CC_DRP_TOGGLING;
+	}
+  
+	tcpc->typec_local_cc = pull;
+	return tcpc->ops->set_cc(tcpc, pull);
+}
 int tcpci_set_polarity(struct tcpc_device *tcpc, int polarity);
 int tcpci_set_low_rp_duty(struct tcpc_device *tcpc, bool low_rp);
 int tcpci_set_vconn(struct tcpc_device *tcpc, int enable);
 
 int tcpci_is_low_power_mode(struct tcpc_device *tcpc);
 int tcpci_set_low_power_mode(struct tcpc_device *tcpc, bool en, int pull);
+int tcpci_idle_poll_ctrl(struct tcpc_device *tcpc, bool en, bool lock);
 int tcpci_set_watchdog(struct tcpc_device *tcpc, bool en);
 int tcpci_alert_vendor_defined_handler(struct tcpc_device *tcpc);
-int tcpci_set_auto_dischg_discnt(struct tcpc_device *tcpc, bool en);
-int tcpci_get_vbus_voltage(struct tcpc_device *tcpc, u32 *vbus);
-#if CONFIG_TCPC_VSAFE0V_DETECT_IC
 int tcpci_is_vsafe0v(struct tcpc_device *tcpc);
-#endif /* CONFIG_TCPC_VSAFE0V_DETECT_IC */
 
-#if CONFIG_WATER_DETECTION
+#ifdef CONFIG_WATER_DETECTION
 int tcpci_is_water_detected(struct tcpc_device *tcpc);
 int tcpci_set_water_protection(struct tcpc_device *tcpc, bool en);
 int tcpci_set_usbid_polling(struct tcpc_device *tcpc, bool en);
 int tcpci_notify_wd_status(struct tcpc_device *tcpc, bool water_detected);
 #endif /* CONFIG_WATER_DETECTION */
 
-#if CONFIG_CABLE_TYPE_DETECTION
+#ifdef CONFIG_CABLE_TYPE_DETECTION
 int tcpci_notify_cable_type(struct tcpc_device *tcpc);
 #endif /* CONFIG_CABLE_TYPE_DETECTION */
-
-int tcpci_notify_fod_status(struct tcpc_device *tcpc);
-
-int tcpci_notify_typec_otp(struct tcpc_device *tcpc);
-
-int tcpci_set_cc_hidet(struct tcpc_device *tcpc, bool en);
-int tcpci_notify_plug_out(struct tcpc_device *tcpc);
-
-int tcpci_set_floating_ground(struct tcpc_device *tcpc, bool en);
-
-int tcpci_set_otp_fwen(struct tcpc_device *tcpc, bool en);
 
 #if IS_ENABLED(CONFIG_USB_POWER_DELIVERY)
 
@@ -128,9 +160,11 @@ int tcpci_transmit(struct tcpc_device *tcpc,
 
 int tcpci_set_bist_test_mode(struct tcpc_device *tcpc, bool en);
 
+int tcpci_set_continuous_time(struct tcpc_device *tcpc);
+
 int tcpci_set_bist_carrier_mode(struct tcpc_device *tcpc, uint8_t pattern);
 
-#if CONFIG_USB_PD_RETRY_CRC_DISCARD
+#ifdef CONFIG_USB_PD_RETRY_CRC_DISCARD
 int tcpci_retransmit(struct tcpc_device *tcpc);
 #endif	/* CONFIG_USB_PD_RETRY_CRC_DISCARD */
 #endif	/* CONFIG_USB_POWER_DELIVERY */
@@ -150,16 +184,17 @@ int tcpci_disable_vbus_control(struct tcpc_device *tcpc);
 int tcpci_notify_attachwait_state(struct tcpc_device *tcpc, bool as_sink);
 int tcpci_enable_auto_discharge(struct tcpc_device *tcpc, bool en);
 int tcpci_enable_force_discharge(struct tcpc_device *tcpc, bool en, int mv);
-
+int tcpci_pd_reset(struct tcpc_device *tcpc);
 #if IS_ENABLED(CONFIG_USB_POWER_DELIVERY)
-
+/*N19A code for HQHW-6756 by p-wuwencheng at 2024/06/24*/
+int tcpci_notify_soft_reset(struct tcpc_device *tcpc);
 int tcpci_notify_hard_reset_state(struct tcpc_device *tcpc, uint8_t state);
 
 int tcpci_enter_mode(struct tcpc_device *tcpc,
 	uint16_t svid, uint8_t ops, uint32_t mode);
 int tcpci_exit_mode(struct tcpc_device *tcpc, uint16_t svid);
 
-#if CONFIG_USB_PD_ALT_MODE
+#ifdef CONFIG_USB_PD_ALT_MODE
 int tcpci_report_hpd_state(struct tcpc_device *tcpc, uint32_t dp_status);
 int tcpci_dp_status_update(struct tcpc_device *tcpc, uint32_t dp_status);
 int tcpci_dp_configure(struct tcpc_device *tcpc, uint32_t dp_config);
@@ -173,25 +208,25 @@ int tcpci_dp_notify_config_done(struct tcpc_device *tcpc,
 	uint32_t local_cfg, uint32_t remote_cfg, bool ack);
 #endif	/* CONFIG_USB_PD_ALT_MODE */
 
-#if CONFIG_USB_PD_CUSTOM_VDM
+#ifdef CONFIG_USB_PD_CUSTOM_VDM
 int tcpci_notify_uvdm(struct tcpc_device *tcpc, bool ack);
 #endif	/* CONFIG_USB_PD_CUSTOM_VDM */
 
-#if CONFIG_USB_PD_ALT_MODE_RTDC
+#ifdef CONFIG_USB_PD_ALT_MODE_RTDC
 int tcpci_dc_notify_en_unlock(struct tcpc_device *tcpc);
 #endif	/* CONFIG_USB_PD_ALT_MODE_RTDC */
 
-#if CONFIG_USB_PD_REV30
+#ifdef CONFIG_USB_PD_REV30
 
-#if CONFIG_USB_PD_REV30_ALERT_REMOTE
+#ifdef CONFIG_USB_PD_REV30_ALERT_REMOTE
 int tcpci_notify_alert(struct tcpc_device *tcpc, uint32_t ado);
 #endif	/* CONFIG_USB_PD_REV30_ALERT_REMOTE */
 
-#if CONFIG_USB_PD_REV30_STATUS_REMOTE
+#ifdef CONFIG_USB_PD_REV30_STATUS_REMOTE
 int tcpci_notify_status(struct tcpc_device *tcpc, struct pd_status *sdb);
 #endif	/* CONFIG_USB_PD_REV30_STATUS_REMOTE */
 
-#if CONFIG_USB_PD_REV30_BAT_INFO
+#ifdef CONFIG_USB_PD_REV30_BAT_INFO
 int tcpci_notify_request_bat_info(
 	struct tcpc_device *tcpc, enum pd_battery_reference ref);
 #endif	/* CONFIG_USB_PD_REV30_BAT_INFO */

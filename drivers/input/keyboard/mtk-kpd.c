@@ -320,9 +320,9 @@ static int kpd_pdrv_remove(struct platform_device *pdev)
 static int kpd_pdrv_suspend(struct platform_device *pdev, pm_message_t state)
 {
  	struct mtk_keypad *keypad = platform_get_drvdata(pdev);
-
-	enable_kpd(keypad->base, 0);
-
+/* N6R code for HQ-442806 by jishen at 2025/01/22 start */
+	enable_kpd(keypad->base, 1);
+/* N6R code for HQ-442806 by jishen at 2024/01/22 end */
 	return 0;
 }
 

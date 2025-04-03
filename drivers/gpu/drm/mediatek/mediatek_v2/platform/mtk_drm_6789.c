@@ -157,7 +157,13 @@ const struct mtk_dsi_driver_data mt6789_dsi_driver_data = {
 	.reg_vm_cmd_data30_ofs = 0x238,
 	.poll_for_idle = mtk_dsi_poll_for_idle,
 	.irq_handler = mtk_dsi_irq_status,
+/*N6 code for HQ-304268 by zhengjie at 2023/8/23 start*/
+#ifdef CONFIG_MI_ESD_SUPPORT
+	.mi_esd_eint_compat = "mediatek, ESD_FLAG-eint",
+#else
 	.esd_eint_compat = "mediatek, DSI_TE-eint",
+#endif
+/*N6 code for HQ-304268 by zhengjie at 2023/8/23 end*/
 	.support_shadow = false,
 	.need_bypass_shadow = true,
 	.need_wait_fifo = true,
@@ -1170,6 +1176,11 @@ static const struct mtk_addon_scenario_data mt6789_addon_main[ADDON_SCN_NR] = {
 		[TWO_SCALING] = {
 				.module_num = ARRAY_SIZE(addon_rsz_data),
 				.module_data = addon_rsz_data,
+				.hrt_type = HRT_TB_TYPE_GENERAL1,
+			},
+		[WDMA_WRITE_BACK] = {
+				.module_num = ARRAY_SIZE(addon_wdma0_data),
+				.module_data = addon_wdma0_data,
 				.hrt_type = HRT_TB_TYPE_GENERAL1,
 			},
 };

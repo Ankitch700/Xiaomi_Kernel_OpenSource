@@ -452,5 +452,23 @@ struct scp_sub_feature_tb sensor_type_table[NUM_SENSOR_TYPE] = {
 		.freq    = 0,
 		.enable  = 0,
 	},
+/* BSP.AUDIO - 2023.07.13 - modify to bring up UltraSound Sensor start*/
+	{
+		.feature = ELLIPTIC_FUSION_ID,
+		.freq    = 0,
+		.enable  = 0,
+	},
+/* BSP.AUDIO - 2023.07.13 - modify to bring up UltraSound Sensor end*/
+/*N6 code for sar by songguixin at 2023/06/27 start*/
+	{
+		.feature = SAR_ALGO_ID,
+		.freq    = 0,
+		.enable  = 0,
+	},
+	{
+		.feature = SAR_ALGO_1_ID,
+		.freq    = 0,
+		.enable  = 0,
+	},
+/*N6 code for sar by songguixin at 2023/06/27 end*/
 };
-

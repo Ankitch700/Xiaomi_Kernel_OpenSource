@@ -1,0 +1,68 @@
+/* TOUCH start */
+&spi1 {
+	focaltech@0 {
+		compatible = "focaltech,fts";
+		reg = <0>;
+		status = "ok";
+		//panel = <&dsi_panel_n6_42_0d_0a_dsc_vdo_lcm_drv>;
+		spi-max-frequency = <6000000>;
+		interrupt-parent = <&pio>;
+		interrupts = <1 0x2>;
+                focaltech,avdd-name = "avdd";
+		focaltech,avdd-gpio = <&pio 53 0x00>;
+		focaltech,iovdd-name = "iovdd";
+		focaltech,iovdd-gpio = <&pio 157 0x00>;
+		focaltech,reset-gpio =  <&pio 152 0x00>;
+		focaltech,irq-gpio = <&pio 9 0x2001>;
+		focaltech,max-touch-number = <10>;
+		/*N6 code for HQ-303888 by dingying at 2023/08/02 start*/
+		/*N6 code for HQ-357548 by liaoxianguo at 2023/12/12 start*/
+		focaltech,display-coords =  <0 0 17280 38400>;
+		/*N6 code for HQ-357548 by liaoxianguo at 2023/12/12 end*/
+		/*N6 code for HQ-303888 by dingying at 2023/08/02 end*/
+		/*N6 code for HQ-302671 by dingying at 2023/08/08 start*/
+		focaltech,touch-range-array = <1 5 10 15 20>;
+		focaltech,touch-def-array = <3 3 3 3>;
+		focaltech,touch-expert-array = <10 10 10 10
+						20 20 15 10
+						20 20 20 10>;
+		/*N6 code for HQ-302671 by dingying at 2023/08/08 end*/
+	};
+
+	goodix-touch@0 {
+		/*N6 code for HQ-301678 by dingying at 2023/09/19 start*/
+		compatible = "goodix,9916r-spi";
+		reg = <1>;
+		status = "ok";
+		spi-max-frequency = <1000000>;
+		interrupt-parent = <&pio>;
+		interrupts = <9 0x2001>;
+		goodix,avdd-name = "avdd";
+		goodix,avdd-gpio = <&pio 53 0x00>;
+		goodix,iovdd-name = "iovdd";
+		goodix,iovdd-gpio = <&pio 157 0x00>;
+		goodix,reset-gpio = <&pio 152 0x0>;
+		goodix,irq-gpio = <&pio 9 0x2001>;
+		goodix,irq-flags = <2>; /* 1:trigger rising, 2:trigger falling; */
+		/* N6 code for HQ-357549 by zhangzhijian5 at 2023/12/12 start*/
+		goodix,panel-max-x = <17280>;
+		goodix,panel-max-y = <38400>;
+		/* N6 code for HQ-357549 by zhangzhijian5 at 2023/12/12 end*/
+		goodix,panel-max-w = <255>;
+		/* optional properties */
+		goodix,panel-max-p = <4096>; /* max pressure that pen device supported */
+		//goodix,pen-enable; /* support active stylus device*/
+		/* N6 code for HQ-342186 by huangshiquan at 2023/10/31 start*/
+		goodix,sleep-enable; /* enter sleep mode */
+		/* N6 code for HQ-342186 by huangshiquan at 2023/10/31 end*/
+		goodix,firmware-name = "gt9916_ts_fw_visionox.bin";
+		goodix,config-name = "goodix_cfg_group.bin";
+		/*N6 code for HQ-301678 by dingying at 2023/09/19 end*/
+		/*N6 code for HQ-305061 by zhangzhijian5 at 2023/10/30 start*/
+		goodix,touch-expert-array = <2 3 2 2
+					     4 3 3 2
+					     3 3 4 2>;
+		/*N6 code for HQ-305061 by zhangzhijian5 at 2023/10/30 end*/
+	};
+};
+/* TOUCH end */

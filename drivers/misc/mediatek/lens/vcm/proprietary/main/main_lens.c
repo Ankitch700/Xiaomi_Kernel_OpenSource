@@ -79,6 +79,22 @@ static struct stAF_OisPosInfo OisPosInfo;
 /* ------------------------- */
 
 static struct stAF_DrvList g_stAF_DrvList[MAX_NUM_OF_LENS] = {
+/*N6 code for HQ-306051 by huabinchen at 20230711 start*/
+	{1, AFDRV_EMERALD_GT9764VAF, EMERALD_GT9764VAF_SetI2Cclient, EMERALD_GT9764VAF_Ioctl,
+	 EMERALD_GT9764VAF_Release, EMERALD_GT9764VAF_GetFileName, NULL},
+/*N6 code for HQ-306051 by huabinchen at 20230711 end*/
+/*N6 code for HQ-306077 by HQ camera at 20230712 start*/
+	{1, AFDRV_EMERALD_DW9800VAF, EMERALD_DW9800VAF_SetI2Cclient, EMERALD_DW9800VAF_Ioctl,
+	 EMERALD_DW9800VAF_Release, EMERALD_DW9800VAF_GetFileName, NULL},
+/*N6 code for HQ-306077 by HQ camera at 20230712 end*/
+/*N6 code for HQ-314256 by hudongjiao at 20230711 start*/
+	{1, AFDRV_EMERALD_GT9764BAVAF, EMERALD_GT9764BAVAF_SetI2Cclient, EMERALD_GT9764BAVAF_Ioctl,
+	 EMERALD_GT9764BAVAF_Release, EMERALD_GT9764BAVAF_GetFileName, NULL},
+/*N6 code for HQ-314256 by hudongjiao at 20230711 end*/
+/*N6 code for HQ-336394 by wangjie at 20231016 start*/
+	{1, AFDRV_EMERALD_AK7314AF, EMERALD_AK7314AF_SetI2Cclient, EMERALD_AK7314AF_Ioctl,
+	 EMERALD_AK7314AF_Release, EMERALD_AK7314AF_GetFileName, NULL},
+/*N6 code for HQ-336394 by wangjie at 20231016 end*/
 	{1, AFDRV_DW9718TAF, DW9718TAF_SetI2Cclient, DW9718TAF_Ioctl,
 	 DW9718TAF_Release, DW9718TAF_GetFileName, NULL},
 	{1, AFDRV_AK7371AF, AK7371AF_SetI2Cclient, AK7371AF_Ioctl,

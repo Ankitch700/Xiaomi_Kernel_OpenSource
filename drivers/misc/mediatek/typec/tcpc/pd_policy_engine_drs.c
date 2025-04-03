@@ -1,6 +1,16 @@
-// SPDX-License-Identifier: GPL-2.0
 /*
- * Copyright (c) 2020 MediaTek Inc.
+ * Copyright (C) 2020 Richtek Inc.
+ *
+ * Power Delivery Policy Engine for DRS
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License for more details.
  */
 
 #include "inc/pd_core.h"
@@ -53,7 +63,7 @@ void pe_drs_ufp_dfp_accept_dr_swap_entry(struct pd_port *pd_port)
 
 void pe_drs_ufp_dfp_change_to_dfp_entry(struct pd_port *pd_port)
 {
-#if CONFIG_USB_PD_RESET_CABLE
+#ifdef CONFIG_USB_PD_RESET_CABLE
 	dpm_reaction_set(pd_port, DPM_REACTION_CAP_RESET_CABLE);
 #endif	/* CONFIG_USB_PD_RESET_CABLE */
 

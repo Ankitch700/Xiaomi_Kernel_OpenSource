@@ -1,12 +1,20 @@
-/* SPDX-License-Identifier: GPL-2.0 */
 /*
- * Copyright (c) 2020 MediaTek Inc.
+ * Copyright (C) 2020 Richtek Inc.
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License for more details.
  */
 
 #ifndef PD_DPM_PDO_SELECT_H
 #define PD_DPM_PDO_SELECT_H
 
-#include "inc/tcpci.h"
+#include "tcpci.h"
 
 struct dpm_pdo_info_t {
 	uint8_t type;
@@ -50,6 +58,6 @@ extern void dpm_extract_pdo_info(
 
 extern bool dpm_find_match_req_info(struct dpm_rdo_info_t *req_info,
 	struct dpm_pdo_info_t *sink, int cnt, uint32_t *src_pdos,
-	int min_uw, uint32_t select_rule);
+	int max_uw, uint32_t select_rule);
 
 #endif	/* PD_DPM_PDO_SELECT_H */

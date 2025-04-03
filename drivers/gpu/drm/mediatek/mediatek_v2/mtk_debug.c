@@ -39,7 +39,11 @@
 #include "mtk_dp_debug.h"
 #include "mtk_drm_arr.h"
 #include "mtk_drm_graphics_base.h"
-
+/* N6 code for HQ-331508 by zhangyundan at 2023/10/17 start */
+#ifdef CONFIG_MI_DISP_FOD_SYNC
+#include "mi_disp/mi_drm_crtc.h"
+#endif
+/* N6 code for HQ-331508 by zhangyundan at 2023/10/17 end */
 #define DISP_REG_CONFIG_MMSYS_CG_SET(idx) (0x104 + 0x10 * (idx))
 #define DISP_REG_CONFIG_MMSYS_CG_CLR(idx) (0x108 + 0x10 * (idx))
 #define DISP_REG_CONFIG_DISP_FAKE_ENG_EN(idx) (0x200 + 0x20 * (idx))
@@ -419,6 +423,11 @@ int mtkfb_set_backlight_level(unsigned int level)
 		DDPPR_ERR("%s failed to find crtc\n", __func__);
 		return -EINVAL;
 	}
+/* N6 code for HQ-331508 by zhangyundan at 2023/10/17 start */
+#ifdef CONFIG_MI_DISP_FOD_SYNC
+	ret = mi_drm_bl_wait_for_completion(crtc, level);
+#endif
+/* N6 code for HQ-331508 by zhangyundan at 2023/10/17 end */
 	ret = mtk_drm_setbacklight(crtc, level);
 
 	return ret;
@@ -821,14 +830,20 @@ static void mtk_ddic_send_cb(struct cmdq_cb_data data)
 	CRTC_MMP_MARK(0, ddic_send_cmd, 1, 1);
 }
 
+/*N6 code for HQ-304449 by p-zhoujiawei1 at 2023/07/05 start*/
 int mtk_ddic_dsi_send_cmd(struct mtk_ddic_dsi_msg *cmd_msg,
-			bool blocking)
+			bool blocking, bool queueing)
+/*N6 code for HQ-304449 by p-zhoujiawei1 at 2023/07/05 end*/
 {
 	struct drm_crtc *crtc;
 	struct mtk_drm_crtc *mtk_crtc;
 	struct mtk_drm_private *private;
 	struct mtk_ddp_comp *output_comp;
 	struct cmdq_pkt *cmdq_handle;
+	/* N6 code for HQ-333177 by p-zhangyundan at 2023/11/04 start */
+	struct cmdq_client *gce_client;
+	bool use_lpm = false;
+	/* N6 code for HQ-333177 by p-zhangyundan at 2023/11/04 end */
 	bool is_frame_mode;
 	struct mtk_cmdq_cb_data *cb_data;
 	int index = 0;
@@ -857,25 +872,29 @@ int mtk_ddic_dsi_send_cmd(struct mtk_ddic_dsi_msg *cmd_msg,
 	private = crtc->dev->dev_private;
 	mtk_crtc = to_mtk_crtc(crtc);
 
-	mutex_lock(&private->commit.lock);
-	DDP_MUTEX_LOCK(&mtk_crtc->lock, __func__, __LINE__);
+	/*N6 code for HQ-304449 by p-zhoujiawei1 at 2023/07/05 start*/
+	if (!queueing) {
+		mutex_lock(&private->commit.lock);
+		DDP_MUTEX_LOCK(&mtk_crtc->lock, __func__, __LINE__);
 
-	if (!mtk_crtc->enabled) {
-		DDPMSG("crtc%d disable skip %s\n",
-			drm_crtc_index(&mtk_crtc->base), __func__);
-		DDP_MUTEX_UNLOCK(&mtk_crtc->lock, __func__, __LINE__);
-		mutex_unlock(&private->commit.lock);
-		CRTC_MMP_EVENT_END(index, ddic_send_cmd, 0, 1);
-		return -EINVAL;
-	} else if (mtk_crtc->ddp_mode == DDP_NO_USE) {
-		DDPMSG("skip %s, ddp_mode: NO_USE\n",
-			__func__);
-		DDP_MUTEX_UNLOCK(&mtk_crtc->lock, __func__, __LINE__);
-		mutex_unlock(&private->commit.lock);
-		CRTC_MMP_EVENT_END(index, ddic_send_cmd, 0, 2);
-		return -EINVAL;
+		if (!mtk_crtc->enabled) {
+			DDPMSG("crtc%d disable skip %s\n",
+				drm_crtc_index(&mtk_crtc->base), __func__);
+			DDP_MUTEX_UNLOCK(&mtk_crtc->lock, __func__, __LINE__);
+			mutex_unlock(&private->commit.lock);
+			CRTC_MMP_EVENT_END(index, ddic_send_cmd, 0, 1);
+			return -EINVAL;
+		} else if (mtk_crtc->ddp_mode == DDP_NO_USE) {
+			DDPMSG("skip %s, ddp_mode: NO_USE\n",
+				__func__);
+			DDP_MUTEX_UNLOCK(&mtk_crtc->lock, __func__, __LINE__);
+			mutex_unlock(&private->commit.lock);
+			CRTC_MMP_EVENT_END(index, ddic_send_cmd, 0, 2);
+			return -EINVAL;
+		}
+	/*N6 code for HQ-304449 by p-zhoujiawei1 at 2023/07/05 end*/
+
 	}
-
 	output_comp = mtk_ddp_comp_request_output(mtk_crtc);
 	if (unlikely(!output_comp)) {
 		DDPPR_ERR("%s:invalid output comp\n", __func__);
@@ -890,27 +909,38 @@ int mtk_ddic_dsi_send_cmd(struct mtk_ddic_dsi_msg *cmd_msg,
 	CRTC_MMP_MARK(index, ddic_send_cmd, 1, 0);
 
 	/* Kick idle */
-	mtk_drm_idlemgr_kick(__func__, crtc, 0);
+	/*N6 code for HQ-304449 by p-zhoujiawei1 at 2023/07/05 start*/
+	if (!queueing) {
+		mtk_drm_idlemgr_kick(__func__, crtc, 0);
 
-	CRTC_MMP_MARK(index, ddic_send_cmd, 2, 0);
+		CRTC_MMP_MARK(index, ddic_send_cmd, 2, 0);
 
-	mtk_crtc_pkt_create(&cmdq_handle, crtc,
-			mtk_crtc->gce_obj.client[CLIENT_DSI_CFG]);
+		/* only use CLIENT_DSI_CFG for VM CMD scenario */
+		/* use CLIENT_CFG otherwise */
+	/* N6 code for HQ-333177 by p-zhangyundan at 2023/11/04 start */
+	if (cmd_msg)
+		use_lpm = cmd_msg->flags & MIPI_DSI_MSG_USE_LPM;
+	gce_client = (!is_frame_mode && !use_lpm &&
+				mtk_crtc->gce_obj.client[CLIENT_DSI_CFG]) ?
+			mtk_crtc->gce_obj.client[CLIENT_DSI_CFG] :
+			mtk_crtc->gce_obj.client[CLIENT_CFG];
 
+	mtk_crtc_pkt_create(&cmdq_handle, crtc, gce_client);
+	/* N6 code for HQ-333177 by p-zhangyundan at 2023/11/04 end */
 	if (mtk_crtc_with_sub_path(crtc, mtk_crtc->ddp_mode))
 		mtk_crtc_wait_frame_done(mtk_crtc, cmdq_handle,
-			DDP_SECOND_PATH, 0);
+				DDP_SECOND_PATH, 0);
 	else
 		mtk_crtc_wait_frame_done(mtk_crtc, cmdq_handle,
-			DDP_FIRST_PATH, 0);
+				DDP_FIRST_PATH, 0);
 
 	if (is_frame_mode) {
 		cmdq_pkt_clear_event(cmdq_handle,
-			mtk_crtc->gce_obj.event[EVENT_STREAM_BLOCK]);
+				mtk_crtc->gce_obj.event[EVENT_STREAM_BLOCK]);
 		cmdq_pkt_wfe(cmdq_handle,
-			mtk_crtc->gce_obj.event[EVENT_CABC_EOF]);
-		cmdq_pkt_clear_event(cmdq_handle,
-			mtk_crtc->gce_obj.event[EVENT_STREAM_DIRTY]);
+				mtk_crtc->gce_obj.event[EVENT_CABC_EOF]);
+		}
+	/*N6 code for HQ-304449 by p-zhoujiawei1 at 2023/07/05 end*/
 	}
 
 	/* DSI_SEND_DDIC_CMD */
@@ -918,40 +948,46 @@ int mtk_ddic_dsi_send_cmd(struct mtk_ddic_dsi_msg *cmd_msg,
 		ret = mtk_ddp_comp_io_cmd(output_comp, cmdq_handle,
 		DSI_SEND_DDIC_CMD, cmd_msg);
 
-	if (is_frame_mode) {
-		cmdq_pkt_set_event(cmdq_handle,
-			mtk_crtc->gce_obj.event[EVENT_STREAM_DIRTY]);
-		cmdq_pkt_set_event(cmdq_handle,
-			mtk_crtc->gce_obj.event[EVENT_CABC_EOF]);
-		cmdq_pkt_set_event(cmdq_handle,
-			mtk_crtc->gce_obj.event[EVENT_STREAM_BLOCK]);
-	}
-
-	if (blocking) {
-		cmdq_pkt_flush(cmdq_handle);
-		cmdq_pkt_destroy(cmdq_handle);
-	} else {
-		cb_data = kmalloc(sizeof(*cb_data), GFP_KERNEL);
-		if (!cb_data) {
-			DDPPR_ERR("%s:cb data creation failed\n", __func__);
-			DDP_MUTEX_UNLOCK(&mtk_crtc->lock, __func__, __LINE__);
-			mutex_unlock(&private->commit.lock);
-			CRTC_MMP_EVENT_END(index, ddic_send_cmd, 0, 4);
-			return -EINVAL;
+	/*N6 code for HQ-304449 by p-zhoujiawei1 at 2023/07/05 start*/
+	if (!queueing) {
+		if (is_frame_mode) {
+			cmdq_pkt_set_event(cmdq_handle,
+				mtk_crtc->gce_obj.event[EVENT_CABC_EOF]);
+			cmdq_pkt_set_event(cmdq_handle,
+				mtk_crtc->gce_obj.event[EVENT_STREAM_BLOCK]);
 		}
+		if (blocking) {
+			cmdq_pkt_flush(cmdq_handle);
+			cmdq_pkt_destroy(cmdq_handle);
+		} else {
+			cb_data = kmalloc(sizeof(*cb_data), GFP_KERNEL);
+			if (!cb_data) {
+				DDPPR_ERR("%s:cb data creation failed\n", __func__);
+				DDP_MUTEX_UNLOCK(&mtk_crtc->lock, __func__, __LINE__);
+				mutex_unlock(&private->commit.lock);
+				CRTC_MMP_EVENT_END(index, ddic_send_cmd, 0, 4);
+				return -EINVAL;
+			}
 
-		cb_data->cmdq_handle = cmdq_handle;
-		cmdq_pkt_flush_threaded(cmdq_handle, mtk_ddic_send_cb, cb_data);
+			cb_data->cmdq_handle = cmdq_handle;
+			cmdq_pkt_flush_threaded(cmdq_handle, mtk_ddic_send_cb, cb_data);
+		}
 	}
 	DDPMSG("%s -\n", __func__);
-	DDP_MUTEX_UNLOCK(&mtk_crtc->lock, __func__, __LINE__);
-	mutex_unlock(&private->commit.lock);
+
+	if (!queueing) {
+		DDP_MUTEX_UNLOCK(&mtk_crtc->lock, __func__, __LINE__);
+		mutex_unlock(&private->commit.lock);
+	}
+	/*N6 code for HQ-304449 by p-zhoujiawei1 at 2023/07/05 end*/
 	CRTC_MMP_EVENT_END(index, ddic_send_cmd, (unsigned long)crtc,
 			blocking);
 
 	return ret;
 }
-
+/* N6 code for HQ-308399 by zhangyundan at 2023/7/21 start */
+EXPORT_SYMBOL(mtk_ddic_dsi_send_cmd);
+/* N6 code for HQ-308399 by zhangyundan at 2023/7/21 end */
 int mtk_ddic_dsi_read_cmd(struct mtk_ddic_dsi_msg *cmd_msg)
 {
 	struct drm_crtc *crtc;
@@ -1166,7 +1202,9 @@ void ddic_dsi_send_cmd_test(unsigned int case_num)
 		}
 	}
 
-	ret = mtk_ddic_dsi_send_cmd(cmd_msg, true);
+	/*N6 code for HQ-304449 by p-zhoujiawei1 at 2023/07/05 start*/
+	ret = mtk_ddic_dsi_send_cmd(cmd_msg, true, false);
+	/*N6 code for HQ-304449 by p-zhoujiawei1 at 2023/07/05 end*/
 	if (ret != 0) {
 		DDPPR_ERR("mtk_ddic_dsi_send_cmd error\n");
 		goto  done;
@@ -1238,7 +1276,10 @@ void ddic_dsi_send_switch_pgt(unsigned int cmd_num, u8 addr,
 		}
 	}
 
-	ret = mtk_ddic_dsi_send_cmd(cmd_msg, true);
+	/*N6 code for HQ-304449 by p-zhoujiawei1 at 2023/07/05 start*/
+	ret = mtk_ddic_dsi_send_cmd(cmd_msg, true, false);
+	/*N6 code for HQ-304449 by p-zhoujiawei1 at 2023/07/05 end*/
+
 	if (ret != 0) {
 		DDPPR_ERR("mtk_ddic_dsi_send_cmd error\n");
 		goto  done;

@@ -386,7 +386,9 @@ static void audio_boost_work(struct work_struct *work_struct)
 	audio_boost_inst.request_func = __request_empty;
 	USB_BOOST_NOTICE("audio_boost, begin of work\n");
 	audio_core_hold();
-	audio_freq_hold();
+/* N6 code for HQ- 330855 by p-wumingzhu1 at 2023/10/01 */
+	//audio_freq_hold();
+
 
 	while (1) {
 		int timeout;
@@ -402,7 +404,8 @@ static void audio_boost_work(struct work_struct *work_struct)
 	}
 
 	audio_core_release();
-	audio_freq_release();
+/* N6 code for HQ- 330855 by p-wumingzhu1 at 2023/10/01 */
+	//audio_freq_release();
 	audio_boost_inst.request_func = __request_audio;
 	USB_BOOST_NOTICE("audio_boost, end of work\n");
 }

@@ -30,10 +30,16 @@ ccflags-y += -I$(srctree)/drivers/misc/mediatek/base/power/include
 # for musb main
 ccflags-y += -I$(srctree)/drivers/misc/mediatek/usb20/musb_main/
 
-# for typec event
-ifeq ($(CONFIG_TCPC_CLASS),$(filter $(CONFIG_TCPC_CLASS),m y))
+# N6 code for HQ-301669 by wumingzhu1 at 20230705 start */
+ifneq ($(filter $(CONFIG_TCPC_CLASS),m y),)
 	ccflags-y += -I$(srctree)/drivers/misc/mediatek/typec/tcpc/inc
 endif
+
+ifneq ($(filter $(CONFIG_HUAQIN_TCPC_CLASS),m y),)
+	ccflags-y += -I$(srctree)/drivers/misc/mediatek/typec/hq_tcpc/inc
+endif
+# N6 code for HQ-301669 by wumingzhu1 at 20230705 end */
+
 
 # define_trace.h needs to know how to find our header
 CFLAGS_musb_trace.o	:= -I$(src)

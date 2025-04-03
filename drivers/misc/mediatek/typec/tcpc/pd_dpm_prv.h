@@ -1,6 +1,14 @@
-/* SPDX-License-Identifier: GPL-2.0 */
 /*
- * Copyright (c) 2020 MediaTek Inc.
+ * Copyright (C) 2020 Richtek Inc.
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License for more details.
  */
 
 #ifndef PD_DPM_PRV_H_INCLUDED
@@ -54,7 +62,7 @@ struct svdm_svid_ops {
 	bool (*notify_pe_shutdown)(struct pd_port *pd_port,
 		struct svdm_svid_data *svid_data);
 
-#if CONFIG_USB_PD_CUSTOM_VDM
+#ifdef CONFIG_USB_PD_CUSTOM_VDM
 	bool (*dfp_notify_uvdm)(struct pd_port *pd_port,
 		struct svdm_svid_data *svid_data, bool ack);
 
@@ -76,7 +84,7 @@ static inline bool dpm_check_data_msg_event(
 		pd_get_curr_pd_event(pd_port), msg);
 }
 
-#if CONFIG_USB_PD_REV30
+#ifdef CONFIG_USB_PD_REV30
 static inline bool dpm_check_ext_msg_event(
 	struct pd_port *pd_port, uint8_t msg)
 {

@@ -11,6 +11,162 @@
 
 /* Legacy design */
 struct IMGSENSOR_HW_POWER_SEQ sensor_power_sequence[] = {
+/*N6 code for HQ-306051 by huabinchen at 20230710 start*/
+#if defined(S5KHP3_OFILM_MAIN_MIPI_RAW)
+	{
+		SENSOR_DRVNAME_S5KHP3_OFILM_MAIN_MIPI_RAW,
+		{
+/*N6 code for HQ-306051 by huabinchen at 20230711 start*/
+			{AFVDD, Vol_High, 3},
+/*N6 code for HQ-306051 by huabinchen at 20230711 end*/
+			{RST, Vol_Low, 1},
+			{SensorMCLK, Vol_High, 1},
+			{AVDD, Vol_2200, 1},
+			{DVDD, Vol_900, 1},
+			{DOVDD, Vol_1800, 1},
+			{RST, Vol_High, 7}
+		},
+	},
+#endif
+/*N6 code for HQ-306051 by huabinchen at 20230710 end*/
+/*N6 code for HQ-306077 by HQ camera at 20230711 start*/
+#if defined(S5KHPX_SUNNY_MAIN_MIPI_RAW)
+	{
+		SENSOR_DRVNAME_S5KHPX_SUNNY_MAIN_MIPI_RAW,
+		{
+			/*N6 code for HQ-306077 by HQ camera at 20230712 start*/
+			{AFVDD, Vol_High, 3},
+			/*N6 code for HQ-306077 by HQ camera at 20230712 end*/
+			{RST, Vol_Low, 1},
+			{SensorMCLK, Vol_High, 1},
+			{AVDD, Vol_2200, 1},
+			{DVDD, Vol_900, 1},
+			{DOVDD, Vol_1800, 1},
+			{RST, Vol_High, 7}
+		},
+	},
+#endif
+/*N6 code for HQ-306077 by HQ camera at 20230711 end*/
+/*N6 code for HQ- by wangjie at 20231010 start*/
+#if defined(S5KHP3_SAMSUNG_MAIN_MIPI_RAW)
+	{
+		SENSOR_DRVNAME_S5KHP3_SAMSUNG_MAIN_MIPI_RAW,
+		{
+/*N6 code for HQ-336394 by wangjie at 20231016 start*/
+			{AFVDD, Vol_High, 3},
+/*N6 code for HQ-336394 wangjie at 20231016 end*/
+			{RST, Vol_Low, 1},
+			{SensorMCLK, Vol_High, 1},
+			{AVDD, Vol_2200, 1},
+			{DVDD, Vol_900, 1},
+			{DOVDD, Vol_1800, 1},
+			{RST, Vol_High, 7}
+		},
+	},
+#endif
+/*N6 code for HQ-336394 by wangjie at 20231010 end*/
+/*N6 code for  HQ-308044 by hudongjiao at 20230718 start*/
+#if defined(OV64B40_SUNNY_MAIN_MIPI_RAW)
+	{
+		SENSOR_DRVNAME_OV64B40_SUNNY_MAIN_MIPI_RAW,
+		{
+			{AFVDD, Vol_High, 3},
+			{RST, Vol_Low, 1},
+			{SensorMCLK, Vol_High, 1},
+			/*N6 code for  HQ-311145 by hudongjiao at 20230808 start*/
+			{AVDD, Vol_2800, 1},
+			/*N6 code for  HQ-311145 by hudongjiao at 20230808 end*/
+			{DVDD, Vol_1100, 1},
+			{DOVDD, Vol_1800, 1},
+			{RST, Vol_High, 5}
+		},
+	},
+#endif
+/*N6 code for  HQ-308044 by hudongjiao at 20230718 end*/
+/*N6 code for HQ-306078 by zhaobeidou at 20230707 start*/
+#if defined(OV16A1Q_OFILM_FRONT_MIPI_RAW)
+	{
+		SENSOR_DRVNAME_OV16A1Q_OFILM_FRONT_MIPI_RAW,
+		{
+			{RST, Vol_Low, 1},
+			{AVDD, Vol_2800, 1},
+			{DVDD, Vol_1200, 1},
+			{DOVDD, Vol_1800, 1},
+			{SensorMCLK, Vol_High, 5},
+			{RST, Vol_High, 5}
+		},
+	},
+#endif
+#if defined(OV16A1Q_AAC_FRONT_MIPI_RAW)
+	{
+		SENSOR_DRVNAME_OV16A1Q_AAC_FRONT_MIPI_RAW,
+		{
+			{RST, Vol_Low, 1},
+			{AVDD, Vol_2800, 1},
+			{DVDD, Vol_1200, 1},
+			{DOVDD, Vol_1800, 1},
+			{SensorMCLK, Vol_High, 5},
+			{RST, Vol_High, 5}
+		},
+	},
+#endif
+#if defined(GC16B3_OFILM_FRONT_MIPI_RAW)
+	{
+		SENSOR_DRVNAME_GC16B3_OFILM_FRONT_MIPI_RAW,
+		{
+			{RST, Vol_Low, 1},
+			{AVDD, Vol_2800, 1},
+			{DVDD, Vol_1200, 1},
+			{DOVDD, Vol_1800, 1},
+			{SensorMCLK, Vol_High, 5},
+			{RST, Vol_High, 5}
+		},
+	},
+#endif
+#if defined(GC16B3_AAC_FRONT_MIPI_RAW)
+	{
+		SENSOR_DRVNAME_GC16B3_AAC_FRONT_MIPI_RAW,
+		{
+			{RST, Vol_Low, 1},
+			{AVDD, Vol_2800, 1},
+			{DVDD, Vol_1200, 1},
+			{DOVDD, Vol_1800, 1},
+			{SensorMCLK, Vol_High, 5},
+			{RST, Vol_High, 5}
+		},
+	},
+#endif
+/*N6 code for HQ-306078 by zhaobeidou at 20230707 end*/
+/*N6 code for HQ-306079 by jinxiaoqin at 20230711 start*/
+#if defined(OV08D10_OFILM_ULTRA_MIPI_RAW)
+	{
+		SENSOR_DRVNAME_OV08D10_OFILM_ULTRA_MIPI_RAW,
+
+		{
+			{RST, Vol_Low, 1},
+			{DOVDD, Vol_1800, 1},
+			{AVDD, Vol_2800, 1},
+			{DVDD, Vol_1200, 5},
+			{RST, Vol_High, 1},
+			{SensorMCLK, Vol_High, 10}
+		},
+	},
+#endif
+#if defined(OV08D10_AAC_ULTRA_MIPI_RAW)
+	{
+		SENSOR_DRVNAME_OV08D10_AAC_ULTRA_MIPI_RAW,
+
+		{
+			{RST, Vol_Low, 1},
+			{DOVDD, Vol_1800, 1},
+			{AVDD, Vol_2800, 1},
+			{DVDD, Vol_1200, 5},
+			{RST, Vol_High, 1},
+			{SensorMCLK, Vol_High, 10}
+		},
+	},
+#endif
+/*N6 code for HQ-306079 by jinxiaoqin at 20230711 end*/
 #if defined(IMX766_MIPI_RAW)
 	{
 		SENSOR_DRVNAME_IMX766_MIPI_RAW,
@@ -1125,6 +1281,36 @@ struct IMGSENSOR_HW_POWER_SEQ sensor_power_sequence[] = {
 		},
 	},
 #endif
+/*N6 code for HQ-306080 by p-wangjie103 at 2023/07/08 start*/
+#if defined(OV02B10_TRULY_MACRO_MIPI_RAW)
+	{
+		SENSOR_DRVNAME_OV02B10_TRULY_MACRO_MIPI_RAW,
+		{
+			{RST, Vol_Low, 1},
+			{DOVDD, Vol_1800, 1},
+			{SensorMCLK, Vol_High, 1},
+			{AVDD, Vol_2800, 5},
+			{DVDD, Vol_1200, 1},
+			{RST, Vol_High, 10}
+		},
+	},
+#endif
+/*N6 code for HQ-306080 by p-wangjie103 at 2023/07/08 end*/
+/*N6 code for HQ-306080 by p-wangjie103 at 2023/07/12 start*/
+#if defined(OV02B10_AAC_MACRO_MIPI_RAW)
+	{
+		SENSOR_DRVNAME_OV02B10_AAC_MACRO_MIPI_RAW,
+		{
+			{RST, Vol_Low, 1},
+			{DOVDD, Vol_1800, 1},
+			{SensorMCLK, Vol_High, 1},
+			{AVDD, Vol_2800, 5},
+			{DVDD, Vol_1200, 1},
+			{RST, Vol_High, 10}
+		},
+	},
+#endif
+/*N6 code for HQ-306080 by p-wangjie103 at 2023/07/12 end*/
 
 	/* add new sensor before this line */
 	{NULL,},

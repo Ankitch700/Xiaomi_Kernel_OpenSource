@@ -5,11 +5,11 @@
 
 #ifndef __MTK_DRM_MMP_H__
 #define __MTK_DRM_MMP_H__
-
-#include "mmprofile.h"
-#include "mmprofile_function.h"
+/* N6 code for HQ-317623 by zhangyundan at 2023/08/21 start */
+#include "../../../misc/mediatek/mmp/mmprofile.h"
+#include "../../../misc/mediatek/mmp/mmprofile_function.h"
 #include "mtk_drm_ddp.h"
-
+/* N6 code for HQ-317623 by zhangyundan at 2023/08/21 end */
 #define MMP_CRTC_NUM 3
 
 /* if changed, need to update init_drm_mmp_event() */

@@ -397,7 +397,10 @@ static int battery_psy_get_property(struct power_supply *psy,
 		ret = 0;
 		break;
 	case POWER_SUPPLY_PROP_TEMP:
-		val->intval = force_get_tbat(gm, true) * 10;
+	    /* N6 code for HQ-301669 by wumingzhu1 at 20230705 start*/
+		val->intval = 25 * 10;
+		ret = 0;
+		/* N6 code for HQ-301669 by wumingzhu1 at 20230705 end*/
 		break;
 	case POWER_SUPPLY_PROP_CAPACITY_LEVEL:
 		val->intval = check_cap_level(bs_data->bat_capacity);
@@ -626,7 +629,7 @@ void battery_service_data_init(struct mtk_battery *gm)
 	struct battery_data *bs_data;
 
 	bs_data = &gm->bs_data;
-	bs_data->psd.name = "battery",
+	bs_data->psd.name = "mtk-battery",
 	bs_data->psd.type = POWER_SUPPLY_TYPE_BATTERY;
 	bs_data->psd.properties = battery_props;
 	bs_data->psd.num_properties = ARRAY_SIZE(battery_props);
@@ -3321,7 +3324,6 @@ static int power_misc_routine_thread(void *arg)
 	struct mtk_battery *gm = arg;
 	struct shutdown_controller *sdd = &gm->sdc;
 	int ret = 0;
-
 	while (1) {
 		ret = wait_event_interruptible(sdd->wait_que, (sdd->timeout == true)
 			|| (sdd->overheat == true));

@@ -74,6 +74,12 @@ endif
 
 mediatek-drm-$(CONFIG_DRM_FBDEV_EMULATION) += mtk_drm_fbdev.o
 
+#N6 code for HQ-304449 by p-zhoujiawei1 at 2023/07/05 start
+ifeq ($(CONFIG_MI_DISP), y)
+include $(src)/mi_disp/Makefile
+endif
+
+#N6 code for HQ-304449 by p-zhoujiawei1 at 2023/07/05 end
 obj-$(CONFIG_DRM_MEDIATEK) += mediatek-drm.o
 obj-$(CONFIG_DRM_MEDIATEK) += mtk_sync.o
 
@@ -115,3 +121,8 @@ ccflags-y += -DCCORR_SUPPORT
 
 subdir-ccflags-y += -I$(srctree)/drivers/misc/mediatek/include/
 subdir-ccflags-y += -I$(srctree)/drivers/misc/mediatek/include/mt-plat/
+#N6 code for HQ-304449 by p-zhoujiawei1 at 2023/07/05 start
+subdir-ccflags-y += -I$(srctree)/drivers/misc/mediatek/mtk-interconnect/
+subdir-ccflags-y += -I$(srctree)/drivers/misc/mediatek/mmp/
+subdir-ccflags-y += -I$(srctree)/drivers/gpu/drm/mediatek/mediatek_v2/
+#N6 code for HQ-304449 by p-zhoujiawei1 at 2023/07/05 end

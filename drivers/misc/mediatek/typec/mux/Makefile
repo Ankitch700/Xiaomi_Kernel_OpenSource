@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: GPL-2.0
 
 ccflags-y += -I$(srctree)/drivers/usb/typec
+ccflags-y += -I$(srctree)/drivers/misc/mediatek/typec/inc
 ccflags-y += -I$(srctree)/drivers/misc/mediatek/typec/tcpc/inc
 
 obj-$(CONFIG_MTK_USB_TYPEC_MUX) += mux_switch.o
@@ -13,3 +14,4 @@ obj-$(CONFIG_TYPEC_MUX_DP_SELECTOR) += usb_dp_selector.o
 ifneq ($(wildcard $(srctree)/$(src)/k6983v1_64_alpha),)
 obj-$(CONFIG_TYPEC_MUX_ALPHA_FSA4480) += k6983v1_64_alpha/
 endif
+

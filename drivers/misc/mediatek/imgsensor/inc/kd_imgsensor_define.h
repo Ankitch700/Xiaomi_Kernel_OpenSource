@@ -123,7 +123,9 @@ enum ACDK_CAMERA_OPERATION_MODE_ENUM {
  ************************************************************************/
 
 /*  */
-#define MAX_NUM_OF_SUPPORT_SENSOR 32
+//N6 code for HQ-325915 by jinxiaoqin at 2023.09.08 start
+#define MAX_NUM_OF_SUPPORT_SENSOR 13
+//N6 code for HQ-325915 by jinxiaoqin at 2023.09.08 end
 /*  */
 #define SENSOR_CLOCK_POLARITY_HIGH    0
 #define SENSOR_CLOCK_POLARITY_LOW 1

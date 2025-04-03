@@ -833,4 +833,32 @@ config DRM_MEDIATEK_PANEL
 	  and uses 24-bits RGB per pixel. It provides a MIPI DSI interface
 	  to host.
 
+# N6 code for HQ-301708 by zhengjie at 2023/7/5 start
+config DRM_PANEL_N6_42_0D_0A_DSC_VDO
+	tristate "42 0D 0A FHD+ vdo mode panel"
+	depends on OF
+	depends on DRM_MIPI_DSI
+	depends on BACKLIGHT_CLASS_DEVICE
+	help
+ 	  Say Y here if you want to enable support for this VDO
+ 	  mode Full HD Plus panel. The panel has a 1080x2400 resolution
+ 	  and uses 24-bits RGB per pixel. It provides a MIPI DSI interface
+ 	  to host.
+# N6 code for HQ-301708 by zhengjie at 2023/7/5 end
+
+# N6 code for HQ-305068 by zhengjie at 2023/9/19 start
+# N6 code for HQ-339295 by zhengjie at 2023/10/20 start
+config DRM_PANEL_N6_41_02_0B_DSC_VDO
+	tristate "41 02 0B FHD+ vdo mode panel"
+	depends on OF
+	depends on DRM_MIPI_DSI
+	depends on BACKLIGHT_CLASS_DEVICE
+	help
+ 	  Say Y here if you want to enable support for this VDO
+ 	  mode Full HD Plus panel. The panel has a 1080x2400 resolution
+ 	  and uses 24-bits RGB per pixel. It provides a MIPI DSI interface
+ 	  to host.
+# N6 code for HQ-339295 by zhengjie at 2023/10/20 end
+# N6 code for HQ-305068 by zhengjie at 2023/9/19 end
+
 endmenu

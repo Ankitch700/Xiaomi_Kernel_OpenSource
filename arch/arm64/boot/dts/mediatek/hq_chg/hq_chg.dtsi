@@ -1,0 +1,101 @@
+#include "mediatek/hq_chg/subpmic.dtsi"
+#include "mediatek/hq_chg/rt1711.dtsi"
+#include "mediatek/hq_chg/sc8541.dtsi"
+#include "mediatek/hq_chg/nu2115.dtsi"
+#include "mediatek/hq_chg/bq28z610_fg.dtsi"
+#include "mediatek/hq_chg/hq_jeita.dtsi"
+#include "mediatek/hq_chg/thermal_chg.dtsi"
+#include "mediatek/hq_chg/hq_qc.dtsi"
+#include "mediatek/hq_chg/xm_smart_chg.dtsi"
+
+/* N6 code for HQ-301669 by wumingzhu1 at 20230705 start */
+&hq_chg_manager {
+	status = "okay";
+	hq_chg_manager,QC3_mode = <0>; /*0-not support; 1-QC3; 2-QC3P5*/
+	hq_chg_manager,usb_charger_current = <500>;
+	hq_chg_manager,float_charger_current = <1000>;
+	hq_chg_manager,cdp_charger_current = <960>;
+	hq_chg_manager,ac_charger_current = <2000>;
+	hq_chg_manager,hvdcp_charger_current = <3600>;
+	hq_chg_manager,hvdcp_input_current = <2000>;
+	hq_chg_manager,hvdcp3_charger_current = <4000>;
+	hq_chg_manager,hvdcp3_input_current = <3000>;
+	hq_chg_manager,pd2_charger_current = <3600>;
+	hq_chg_manager,pd2_input_current = <2000>;
+	hq_chg_manager,en_floatgnd;
+	chargerpump,master;
+	chargerpump,slave;
+	hq_chg_manager,battery_temp_level = <(-100) 150 480 520 600>;
+};
+
+&hq_cp_policy {
+	status = "okay";
+};
+
+&rpm {
+	status = "okay";
+};
+
+&hq_pd_adapter {
+	status = "okay";
+	pd_adapter,name = "pd_adapter1";
+};
+
+&xm_pd_adapter {
+	status = "okay";
+	adapter_name = "pd_adapter";
+};
+
+&hq_qc_policy {
+	status = "okay";
+};
+
+/* N6 code for HQ-301669 by wumingzhu1 at 20230705 end */
+
+&mtk_gauge {
+	status = "disabled";
+};
+
+&charger {
+	status = "disabled";
+};
+
+&mt6358_batoc_throttle {
+	status = "disabled";
+};
+
+&mt6375_typec {
+	status = "disabled";
+};
+
+&mt6358_dynamic_loading_throttling {
+	status = "disabled";
+};
+
+&mt6375_chg {
+	status = "disabled";
+};
+
+&pe {
+	status = "disabled";
+};
+
+&pe2 {
+	status = "disabled";
+};
+
+&pe4 {
+	status = "disabled";
+};
+
+&pe5 {
+	status = "disabled";
+};
+
+&pdc {
+	status = "disabled";
+};
+
+&pd_adapter {
+	status = "disabled";
+};

@@ -45,6 +45,10 @@
 #define PIN_OUT_SIZE_SCP_CONNSYS         3
 #define PIN_OUT_SIZE_SCP_HWVOTER_DEBUG   2
 #define PIN_OUT_SIZE_DEBUG_CMD           2
+/* BSP.AUDIO - 2023.07.13 - modify to bring up UltraSound Sensor start*/
+#define PIN_IN_SIZE_ELLIPTIC_ULTRA_0     10
+#define PIN_OUT_SIZE_ELLIPTIC_ULTRA_0    10
+/* BSP.AUDIO - 2023.07.13 - modify to bring up UltraSound Sensor end*/
 
 /* scp Core ID definition */
 enum scp_core_id {
@@ -94,6 +98,10 @@ enum {
 	IPI_OUT_SCP_AOD           = 37,
 	IPI_IN_SCP_AOD            = 38,
 	/* reserved 39, 40 for AOV */
+	/* BSP.AUDIO - 2023.07.13 - modify to bring up UltraSound Sensor start*/
+	IPI_OUT_ELLIPTIC_ULTRA_0  = 39,
+	IPI_IN_ELLIPTIC_ULTRA_0   = 40,
+	/* BSP.AUDIO - 2023.07.13 - modify to bring up UltraSound Sensor end*/
 	IPI_OUT_DEBUG_CMD         = 41,
 	IPI_IN_RV_SPK_PROCESS     = 42,
 	SCP_IPI_COUNT
@@ -138,6 +146,9 @@ enum scp_reserve_mem_id_t {
 	SENS_CUSTOM_W_MEM_ID,
 	SENS_CUSTOM_R_MEM_ID,
 	SCP_SPK_MEM_ID,
+	/* BSP.AUDIO - 2023.07.13 - modify to bring up UltraSound Sensor start*/
+	SCP_ELLIPTIC_DEBUG_MEM,
+	/* BSP.AUDIO - 2023.07.13 - modify to bring up UltraSound Sensor end*/
 	NUMS_MEM_ID,
 };
 

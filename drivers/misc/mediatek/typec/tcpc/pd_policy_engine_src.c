@@ -1,6 +1,16 @@
-// SPDX-License-Identifier: GPL-2.0
 /*
- * Copyright (c) 2020 MediaTek Inc.
+ * Copyright (C) 2020 Richtek Inc.
+ *
+ * Power Delivery Policy Engine for SRC
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License for more details.
  */
 
 #include <linux/delay.h>
@@ -36,11 +46,6 @@ void pe_src_discovery_entry(struct pd_port *pd_port)
 	pd_port->pe_data.pd_connected = false;
 
 	pd_enable_timer(pd_port, PD_TIMER_SOURCE_CAPABILITY);
-
-#if CONFIG_USB_PD_SRC_STARTUP_DISCOVER_ID
-	if (pd_is_discover_cable(pd_port))
-		pd_enable_timer(pd_port, PD_TIMER_DISCOVER_ID);
-#endif
 }
 
 void pe_src_send_capabilities_entry(struct pd_port *pd_port)
@@ -158,9 +163,9 @@ void pe_src_soft_reset_entry(struct pd_port *pd_port)
  Source Startup Structured VDM Discover Identity State Diagram (TODO)
  */
 
-#if CONFIG_USB_PD_SRC_STARTUP_DISCOVER_ID
+#ifdef CONFIG_USB_PD_SRC_STARTUP_DISCOVER_ID
 
-#if CONFIG_PD_SRC_RESET_CABLE
+#ifdef CONFIG_PD_SRC_RESET_CABLE
 void pe_src_cbl_send_soft_reset_entry(struct pd_port *pd_port)
 {
 	PE_STATE_WAIT_RESPONSE(pd_port);
@@ -192,7 +197,7 @@ void pe_src_vdm_identity_naked_entry(struct pd_port *pd_port)
 #endif	/* CONFIG_USB_PD_SRC_STARTUP_DISCOVER_ID */
 
 
-#if CONFIG_USB_PD_REV30
+#ifdef CONFIG_USB_PD_REV30
 
 /*
  * [PD3.0] Source Port Not Supported Message State Diagram
@@ -221,7 +226,7 @@ void pe_src_chunk_received_entry(struct pd_port *pd_port)
  * [PD3.0] Figure 8-73 Source Port Source Alert State Diagram
  */
 
-#if CONFIG_USB_PD_REV30_ALERT_LOCAL
+#ifdef CONFIG_USB_PD_REV30_ALERT_LOCAL
 void pe_src_send_source_alert_entry(struct pd_port *pd_port)
 {
 	PE_STATE_WAIT_TX_SUCCESS(pd_port);
@@ -233,7 +238,7 @@ void pe_src_send_source_alert_entry(struct pd_port *pd_port)
  * [PD3.0] Figure 8-76 Source Port Sink Alert State Diagram
  */
 
-#if CONFIG_USB_PD_REV30_ALERT_REMOTE
+#ifdef CONFIG_USB_PD_REV30_ALERT_REMOTE
 void pe_src_sink_alert_received_entry(struct pd_port *pd_port)
 {
 	PE_STATE_DPM_INFORMED(pd_port);
@@ -246,7 +251,7 @@ void pe_src_sink_alert_received_entry(struct pd_port *pd_port)
  * [PD3.0] Figure 8-78 Source Give Source Capabilities Extended State Diagram
  */
 
-#if CONFIG_USB_PD_REV30_SRC_CAP_EXT_LOCAL
+#ifdef CONFIG_USB_PD_REV30_SRC_CAP_EXT_LOCAL
 void pe_src_give_source_cap_ext_entry(struct pd_port *pd_port)
 {
 	PE_STATE_WAIT_TX_SUCCESS(pd_port);
@@ -254,12 +259,17 @@ void pe_src_give_source_cap_ext_entry(struct pd_port *pd_port)
 	pd_dpm_send_source_cap_ext(pd_port);
 }
 #endif	/* CONFIG_USB_PD_REV30_SRC_CAP_EXT_LOCAL */
+void pe_src_give_sink_cap_ext_entry(struct pd_port *pd_port)
+{
+	PE_STATE_WAIT_TX_SUCCESS(pd_port);
 
+	pd_dpm_send_sink_cap_ext(pd_port);
+}
 /*
  * [PD3.0] Figure 8-80 Source Give Source Status State Diagram
  */
 
-#if CONFIG_USB_PD_REV30_STATUS_LOCAL
+#ifdef CONFIG_USB_PD_REV30_STATUS_LOCAL
 void pe_src_give_source_status_entry(struct pd_port *pd_port)
 {
 	PE_STATE_WAIT_TX_SUCCESS(pd_port);
@@ -272,7 +282,7 @@ void pe_src_give_source_status_entry(struct pd_port *pd_port)
  * [PD3.0] Figure 8-81 Source Port Get Sink Status State Diagram
  */
 
-#if CONFIG_USB_PD_REV30_STATUS_REMOTE
+#ifdef CONFIG_USB_PD_REV30_STATUS_REMOTE
 void pe_src_get_sink_status_entry(struct pd_port *pd_port)
 {
 	PE_STATE_WAIT_MSG(pd_port);
@@ -289,7 +299,7 @@ void pe_src_get_sink_status_exit(struct pd_port *pd_port)
  * [PD3.0] Figure 8-84 Source Give Source PPS Status State Diagram
  */
 
-#if CONFIG_USB_PD_REV30_PPS_SOURCE
+#ifdef CONFIG_USB_PD_REV30_PPS_SOURCE
 void pe_src_give_pps_status_entry(struct pd_port *pd_port)
 {
 	PE_STATE_WAIT_TX_SUCCESS(pd_port);

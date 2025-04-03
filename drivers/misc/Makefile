@@ -57,5 +57,10 @@ obj-$(CONFIG_HABANA_AI)		+= habanalabs/
 obj-$(CONFIG_UACCE)		+= uacce/
 obj-$(CONFIG_XILINX_SDFEC)	+= xilinx_sdfec.o
 obj-$(CONFIG_HISI_HIKEY_USB)	+= hisi_hikey_usb.o
+obj-$(CONFIG_TMS_DEVICE)	+= tmsdrv/
 obj-$(CONFIG_UID_SYS_STATS)	+= uid_sys_stats.o
 obj-y				+= mediatek/
+obj-$(CONFIG_MI_MEMORY_SYSFS)	+= mi-memory/
+#N6 code for HQ-292544 by wangshuai at 20230628 start
+obj-y				+= hqsysfs/
+#N6 code for HQ-292544 by wangshuai at 20230628 end

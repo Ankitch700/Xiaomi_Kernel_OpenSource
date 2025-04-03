@@ -31,6 +31,13 @@
 #define MTK_FILL_MIPI_IMPEDANCE
 #endif
 
+/*N6 code for HQ-304268 by zhengjie at 2023/8/23 start*/
+#ifdef CONFIG_MI_ESD_SUPPORT
+extern atomic_t is_lcm_inited_esd;
+extern atomic_t lcm_valid_irq;
+#endif
+/*N6 code for HQ-304268 by zhengjie at 2023/8/23 end*/
+
 struct device;
 struct device_node;
 struct drm_crtc;

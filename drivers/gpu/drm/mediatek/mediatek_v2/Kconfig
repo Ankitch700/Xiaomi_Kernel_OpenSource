@@ -47,3 +47,14 @@ config MTK_RECU_FENCE_LOCK
 	  reduced to zero in fence signal flow because of linux fence
 	  limitation. So the option will control whether display run
 	  workaround flow.
+
+source "drivers/gpu/drm/mediatek/mediatek_v2/mi_disp/Kconfig"
+
+#N6 code for HQ-304268 by zhengjie at 2023/8/23 start
+config MI_ESD_SUPPORT
+	bool "esd flag pin to do esd check"
+	default y
+	help
+	  do esd check with esd flag pin
+#N6 code for HQ-304268 by zhengjie at 2023/8/23 end
+

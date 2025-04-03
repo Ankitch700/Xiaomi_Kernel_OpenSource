@@ -1283,9 +1283,9 @@ static int pwrap_wait_for_state(struct pmic_wrapper *wrp,
 		bool (*fp)(struct pmic_wrapper *))
 {
 	unsigned long timeout;
-
-	timeout = jiffies + usecs_to_jiffies(10000);
-
+        /* N6 code for HQ-331689 by p-lihaiyang6 at 2023.9.22 start */
+	timeout = jiffies + usecs_to_jiffies(50000);
+       /* N6 code for HQ-331689 by p-lihaiyang6 at 2023.9.22 end */
 	do {
 		if (time_after(jiffies, timeout)) {
 			if (fp(wrp) == 0) {

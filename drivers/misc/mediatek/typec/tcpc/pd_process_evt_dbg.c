@@ -1,13 +1,23 @@
-// SPDX-License-Identifier: GPL-2.0
 /*
- * Copyright (c) 2020 MediaTek Inc.
+ * Copyright (C) 2020 Richtek Inc.
+ *
+ * Power Delivery Process Event For DBGACC
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License for more details.
  */
 
 #include "inc/pd_core.h"
 #include "inc/tcpci_event.h"
 #include "inc/pd_process_evt.h"
 
-#if CONFIG_USB_PD_CUSTOM_DBGACC
+#ifdef CONFIG_USB_PD_CUSTOM_DBGACC
 
 bool pd_process_event_dbg(struct pd_port *pd_port, struct pd_event *pd_event)
 {

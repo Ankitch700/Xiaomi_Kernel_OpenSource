@@ -1,6 +1,16 @@
-// SPDX-License-Identifier: GPL-2.0
 /*
- * Copyright (c) 2020 MediaTek Inc.
+ * Copyright (C) 2020 Richtek Inc.
+ *
+ * Power Delivery Policy Engine for DBGACC
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License for more details.
  */
 
 #include "inc/pd_core.h"
@@ -8,7 +18,7 @@
 #include "inc/tcpci.h"
 #include "inc/pd_policy_engine.h"
 
-#if CONFIG_USB_PD_CUSTOM_DBGACC
+#ifdef CONFIG_USB_PD_CUSTOM_DBGACC
 
 void pe_dbg_ready_entry(struct pd_port *pd_port)
 {

@@ -688,10 +688,12 @@ void mtk_rdma_cal_golden_setting(struct mtk_ddp_comp *comp,
 
 	/* DISP_RDMA_FIFO_CON */
 
+	/* N6 code for HQ-310010 by zhengjie at 2023/8/8 start */
 	if (gsc->is_vdo_mode || (rdma->data->dsi_buffer))
-		gs[GS_RDMA_OUTPUT_VALID_FIFO_TH] = 0;
+		gs[GS_RDMA_OUTPUT_VALID_FIFO_TH] = 500;
 	else
 		gs[GS_RDMA_OUTPUT_VALID_FIFO_TH] = gs[GS_RDMA_PRE_ULTRA_TH_LOW];
+	/* N6 code for HQ-310010 by zhengjie at 2023/8/8 end */
 
 	if (rdma->data->dsi_buffer) {
 		struct mtk_drm_private *priv = comp->mtk_crtc->base.dev->dev_private;

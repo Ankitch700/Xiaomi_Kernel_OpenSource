@@ -19,6 +19,9 @@
 #include <linux/spi/spi.h>
 #include <linux/dma-mapping.h>
 #include <linux/pm_qos.h>
+/*N6 code for HQ-301678 by dingying at 2023/09/19 start*/
+#include "../input/touchscreen/GT9916/goodix_ts_core.h"
+/*N6 code for HQ-301678 by dingying at 2023/09/19 end*/
 
 #define SPI_CFG0_REG                      0x0000
 #define SPI_CFG1_REG                      0x0004
@@ -990,6 +993,11 @@ static int mtk_spi_probe(struct platform_device *pdev)
 			}
 		}
 	}
+/*N6 code for HQ-301678 by dingying at 2023/09/19 start*/
+#ifdef GOODIX_TP_ADD
+	master->num_chipselect = mdata->pad_num; //add
+#endif
+/*N6 code for HQ-301678 by dingying at 2023/09/19 end*/
 
 	platform_set_drvdata(pdev, master);
 	mdata->base = devm_platform_ioremap_resource(pdev, 0);
@@ -1055,13 +1063,16 @@ static int mtk_spi_probe(struct platform_device *pdev)
 			goto err_put_master;
 		}
 
+/*N6 code for HQ-301678 by dingying at 2023/09/19 start*/
+#ifndef GOODIX_TP_ADD
 		if (!master->cs_gpios && master->num_chipselect > 1) {
 			dev_err(&pdev->dev,
 				"cs_gpios not specified and num_chipselect > 1\n");
 			ret = -EINVAL;
 			goto err_put_master;
 		}
-
+#endif
+/*N6 code for HQ-301678 by dingying at 2023/09/19 end*/
 		if (master->cs_gpios) {
 			for (i = 0; i < master->num_chipselect; i++) {
 				ret = devm_gpio_request(&pdev->dev,

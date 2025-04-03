@@ -14,6 +14,26 @@
 
 struct stCAM_CAL_LIST_STRUCT g_camCalList[] = {
 	/*Below is commom sensor */
+	/* N6 code for HQ-306078 by zhaobeidou at 20230712 start*/
+	/*N6 code for HQ-308250 by HQ camera at 20230719 start*/
+	{S5KHP3_OFILM_MAIN_SENSOR_ID, 0xA2, Common_read_region, MAX_EEPROM_SIZE_32K},
+	{S5KHPX_SUNNY_MAIN_SENSOR_ID, 0xA2, Common_read_region, MAX_EEPROM_SIZE_32K},
+	/*N6 code for HQ-308250 by HQ camera at 20230719 end*/
+	/*N6 code for HQ-308250 by wangjie at 20231011 start*/
+	{S5KHP3_SAMSUNG_MAIN_SENSOR_ID, 0xA2, Common_read_region, MAX_EEPROM_SIZE_32K},
+	/*N6 code for HQ-308250 by wangjie at 20231011 end*/
+	/*N6 code for  HQ-308044 by hudongjiao at 20230720 start*/
+	{OV64B40_SUNNY_MAIN_SENSOR_ID, 0xA2, Common_read_region,MAX_EEPROM_SIZE_32K},
+	/*N6 code for  HQ-308044 by hudongjiao at 20230720 end*/
+	{OV16A1Q_OFILM_FRONT_SENSOR_ID, 0xA2, Common_read_region},
+	{OV16A1Q_AAC_FRONT_SENSOR_ID, 0xA2, Common_read_region},
+	{GC16B3_OFILM_FRONT_SENSOR_ID, 0xA2, Common_read_region},
+	{GC16B3_AAC_FRONT_SENSOR_ID, 0xA2, Common_read_region},
+	{OV08D10_OFILM_ULTRA_SENSOR_ID, 0xA0, Common_read_region},
+	{OV08D10_AAC_ULTRA_SENSOR_ID, 0xA0, Common_read_region},
+	{OV02B10_TRULY_MACRO_SENSOR_ID, 0xA2, Common_read_region},
+	{OV02B10_AAC_MACRO_SENSOR_ID, 0xA4, Common_read_region},
+	/* N6 code for HQ-306078 by zhaobeidou at 20230712 end*/
 	{OV48B_SENSOR_ID, 0xA0, Common_read_region, MAX_EEPROM_SIZE_16K},
 	{IMX766_SENSOR_ID, 0xA0, Common_read_region, MAX_EEPROM_SIZE_32K},
 	{IMX766DUAL_SENSOR_ID, 0xA2, Common_read_region, MAX_EEPROM_SIZE_16K},

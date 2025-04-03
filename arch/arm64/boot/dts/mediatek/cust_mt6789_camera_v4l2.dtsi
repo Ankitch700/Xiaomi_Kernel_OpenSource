@@ -72,14 +72,16 @@
 
 /* CAMERA AF */
 &i2c8 {
-	camera_main_af_mtk:camera_main_af@72 {
-		compatible = "mediatek,camera_main_af";
-		reg = <0x72>;
-		status = "okay";
-	};
+
 };
 
 &i2c2 {
+	camera_main_af_mtk:camera_main_af@18 {
+		compatible = "mediatek,camera_main_af";
+		reg = <0x18>;
+		status = "okay";
+	};
+
 	camera_main_two_af_mtk:camera_main_two_af@0d {
 		compatible = "mediatek,camera_main_two_af";
 		reg = <0x0d>;

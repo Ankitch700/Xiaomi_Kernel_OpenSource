@@ -4301,7 +4301,8 @@ static int mt_usb_init(struct musb *musb)
 	/* enable host suspend mode */
 	uwk_vers = 0;
 	mt_usb_wakeup_init(musb);
-	musb->host_suspend = true;
+	/* N6 code for HQ-355956 by p-wuwencheng at 2024/1/7 */
+	musb->host_suspend = false;
 #endif
 	DBG(0, "%s done\n", __func__);
 	return 0;

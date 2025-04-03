@@ -21,7 +21,7 @@
 #include <linux/of_irq.h>
 #include <linux/of_address.h>
 #if IS_ENABLED(CONFIG_MTK_USB_TYPEC)
-#if IS_ENABLED(CONFIG_TCPC_CLASS)
+#if IS_ENABLED(CONFIG_TCPC_CLASS) || IS_ENABLED(CONFIG_HUAQIN_TCPC_CLASS)
 #include <tcpm.h>
 #endif
 #endif
@@ -593,7 +593,7 @@ void mt_usb_otg_init(struct musb *musb)
 #if IS_ENABLED(CONFIG_MTK_USB_TYPEC)
 	DBG(0, "host controlled by TYPEC\n");
 	typec_control = 1;
-#if IS_ENABLED(CONFIG_TCPC_CLASS)
+#if IS_ENABLED(CONFIG_TCPC_CLASS) || IS_ENABLED(CONFIG_HUAQIN_TCPC_CLASS)
 	DBG(0, "host controlled by IDDIG\n");
 	iddig_int_init();
 	vbus_control = 1;

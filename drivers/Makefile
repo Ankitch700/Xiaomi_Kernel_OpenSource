@@ -189,3 +189,6 @@ obj-$(CONFIG_GNSS)		+= gnss/
 obj-$(CONFIG_INTERCONNECT)	+= interconnect/
 obj-$(CONFIG_COUNTER)		+= counter/
 obj-$(CONFIG_MOST)		+= most/
+# BSP.AUDIO - 2023.07.18 - modify to Headphone node start
+obj-$(CONFIG_SWITCH)		+= switch/
+# BSP.AUDIO - 2023.07.18 - modify to Headphone node end

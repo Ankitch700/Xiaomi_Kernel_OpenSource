@@ -1,9 +1,18 @@
-// SPDX-License-Identifier: GPL-2.0
 /*
- * Copyright (c) 2020 MediaTek Inc.
+ * Copyright (C) 2020 Richtek Inc.
+ *
+ * PD Device Policy Manager for DisplayPort
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License for more details.
  */
 
-#if IS_ENABLED(CONFIG_USB_POWER_DELIVERY)
 #include <linux/delay.h>
 
 #include "inc/tcpci.h"
@@ -11,7 +20,9 @@
 #include "inc/pd_dpm_core.h"
 #include "pd_dpm_prv.h"
 
-#if CONFIG_USB_PD_ALT_MODE
+#if IS_ENABLED(CONFIG_USB_POWER_DELIVERY)
+#ifdef CONFIG_USB_PD_ALT_MODE
+
 /* Display Port DFP_U / UFP_U */
 
 
@@ -71,7 +82,7 @@ static inline bool dp_update_dp_connected_both(struct pd_port *pd_port,
 }
 
 /* DP : DFP_U */
-#if CONFIG_USB_PD_ALT_MODE_DFP
+#ifdef CONFIG_USB_PD_ALT_MODE_DFP
 #if DP_DBG_ENABLE
 static const char * const dp_dfp_u_state_name[] = {
 	"dp_dfp_u_none",
@@ -439,7 +450,7 @@ bool dp_dfp_u_notify_enter_mode(struct pd_port *pd_port,
 	dp_data->local_status = pd_port->dp_first_connected;
 	dp_dfp_u_set_state(pd_port, DP_DFP_U_STATUS_UPDATE);
 
-#if CONFIG_USB_PD_DBG_DP_DFP_D_AUTO_UPDATE
+#ifdef CONFIG_USB_PD_DBG_DP_DFP_D_AUTO_UPDATE
 	/*
 	 * For Real Product,
 	 * DFP_U should not send status_update until USB status is changed
@@ -605,7 +616,7 @@ bool dp_dfp_u_notify_dp_status_update(struct pd_port *pd_port, bool ack)
 {
 	bool oper_mode = false;
 	bool valid_connected;
-	uint32_t *ptr;
+
 	struct dp_data *dp_data = pd_get_dp_data(pd_port);
 	struct tcpc_device __maybe_unused *tcpc = pd_port->tcpc;
 
@@ -631,11 +642,7 @@ bool dp_dfp_u_notify_dp_status_update(struct pd_port *pd_port, bool ack)
 		return true;
 	}
 
-	ptr = pd_get_msg_vdm_data_payload(pd_port);
-	if (!ptr)
-		dp_data->remote_status = 0;
-	else
-		dp_data->remote_status = ptr[0];
+	dp_data->remote_status = pd_get_msg_vdm_data_payload(pd_port)[0];
 	DP_INFO("dp_status: 0x%x\n", dp_data->remote_status);
 
 	if (oper_mode) {
@@ -652,7 +659,7 @@ bool dp_dfp_u_notify_dp_status_update(struct pd_port *pd_port, bool ack)
 
 static inline void dp_ufp_u_auto_update(struct pd_port *pd_port)
 {
-#if CONFIG_USB_PD_DBG_DP_UFP_U_AUTO_UPDATE
+#ifdef CONFIG_USB_PD_DBG_DP_UFP_U_AUTO_UPDATE
 	struct dp_data *dp_data = pd_get_dp_data(pd_port);
 
 	if (dp_data->dfp_u_state == DP_DFP_U_OPERATION)
@@ -686,14 +693,9 @@ bool dp_dfp_u_notify_attention(struct pd_port *pd_port,
 {
 	bool valid_connected;
 	struct dp_data *dp_data = pd_get_dp_data(pd_port);
-	uint32_t *ptr;
 	struct tcpc_device __maybe_unused *tcpc = pd_port->tcpc;
 
-	ptr = pd_get_msg_vdm_data_payload(pd_port);
-	if (!ptr)
-		dp_data->remote_status = 0;
-	else
-		dp_data->remote_status = ptr[0];
+	dp_data->remote_status = pd_get_msg_vdm_data_payload(pd_port)[0];
 
 	DP_INFO("dp_status: 0x%x\n", dp_data->remote_status);
 
@@ -796,13 +798,8 @@ static inline int dp_ufp_u_request_dp_status(struct pd_port *pd_port)
 {
 	bool ack;
 	struct dp_data *dp_data = pd_get_dp_data(pd_port);
-	uint32_t *ptr;
 
-	ptr = pd_get_msg_vdm_data_payload(pd_port);
-	if (!ptr)
-		dp_data->remote_status = 0;
-	else
-		dp_data->remote_status = ptr[0];
+	dp_data->remote_status = pd_get_msg_vdm_data_payload(pd_port)[0];
 
 	switch (dp_data->ufp_u_state) {
 	case DP_UFP_U_WAIT:
@@ -865,7 +862,7 @@ bool dp_ufp_u_is_valid_dp_config(struct pd_port *pd_port, uint32_t dp_config)
 
 static inline void dp_ufp_u_auto_attention(struct pd_port *pd_port)
 {
-#if CONFIG_USB_PD_DBG_DP_UFP_U_AUTO_ATTENTION
+#ifdef CONFIG_USB_PD_DBG_DP_UFP_U_AUTO_ATTENTION
 	struct dp_data *dp_data = pd_get_dp_data(pd_port);
 
 	pd_port->mode_svid = USB_SID_DISPLAYPORT;
@@ -876,15 +873,11 @@ static inline void dp_ufp_u_auto_attention(struct pd_port *pd_port)
 static inline int dp_ufp_u_request_dp_config(struct pd_port *pd_port)
 {
 	bool ack = false;
-	uint32_t dp_config, *ptr;
+	uint32_t dp_config;
 	struct dp_data *dp_data = pd_get_dp_data(pd_port);
 	struct tcpc_device __maybe_unused *tcpc = pd_port->tcpc;
 
-	ptr = pd_get_msg_vdm_data_payload(pd_port);
-	if (!ptr)
-		dp_config = 0;
-	else
-		dp_config = ptr[0];
+	dp_config = pd_get_msg_vdm_data_payload(pd_port)[0];
 	DPM_DBG("dp_config: 0x%x\n", dp_config);
 
 	switch (dp_data->ufp_u_state) {
@@ -948,7 +941,7 @@ void pd_dpm_ufp_send_dp_attention(struct pd_port *pd_port)
 
 /* ---- DFP : DP Only ---- */
 
-#if CONFIG_USB_PD_ALT_MODE_DFP
+#ifdef CONFIG_USB_PD_ALT_MODE_DFP
 
 void pd_dpm_dfp_send_dp_status_update(struct pd_port *pd_port)
 {
@@ -994,7 +987,7 @@ bool dp_reset_state(struct pd_port *pd_port, struct svdm_svid_data *svid_data)
 #define DEFAULT_DP_FIRST_CONNECTED		(DPSTS_DFP_D_CONNECTED)
 #define DEFAULT_DP_SECOND_CONNECTED		(DPSTS_DFP_D_CONNECTED)
 
-#if CONFIG_USB_PD_ALT_MODE
+#ifdef CONFIG_USB_PD_ALT_MODE
 static const struct {
 	const char *prop_name;
 	uint32_t mode;

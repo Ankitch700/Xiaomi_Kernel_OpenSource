@@ -69,6 +69,17 @@ enum {
 	SENSOR_TYPE_GYRO_SECONDARY,
 	SENSOR_TYPE_FLICKER_REAR,
 	SENSOR_TYPE_RGBW_REAR,
+	/* BSP.AUDIO - 2023.07.13 - modify to bring up UltraSound Sensor start*/
+	SENSOR_TYPE_ELLIPTIC_FUSION,  /* 78 */
+	/* BSP.AUDIO - 2023.07.13 - modify to bring up UltraSound Sensor end*/
+	/*N6 code for sar by songguixin at 2023/06/27 start*/
+	SENSOR_TYPE_SAR_ALGO,
+	SENSOR_TYPE_SAR_ALGO_1,
+	/*N6 code for sar by songguixin at 2023/06/27 end*/
+	SENSOR_TYPE_AOD,
+	SENSOR_TYPE_FOD,
+	SENSOR_TYPE_ALS_FACTORY_STRM,
+	SENSOR_TYPE_LIGHT_RAW,
 	SENSOR_TYPE_SENSOR_MAX,
 };
 
@@ -136,6 +147,9 @@ enum {
 	ID_GYRO_SECONDARY,
 	ID_FLICKER_REAR,
 	ID_RGBW_REAR,
+	/* BSP.AUDIO - 2023.07.13 - modify to bring up UltraSound Sensor start*/
+	ID_ELLIPTIC_FUSION = SENSOR_TYPE_ELLIPTIC_FUSION - ID_OFFSET,
+	/* BSP.AUDIO - 2023.07.13 - modify to bring up UltraSound Sensor end*/
 	ID_SENSOR_MAX,
 };
 

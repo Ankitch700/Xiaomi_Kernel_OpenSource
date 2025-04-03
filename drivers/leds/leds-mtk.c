@@ -23,7 +23,9 @@
  ***************************************************************************/
 #undef pr_fmt
 #define pr_fmt(fmt) KBUILD_MODNAME " %s(%d) :" fmt, __func__, __LINE__
-
+/* N6 code for HQ-347281 by zhangyundan at 2023/11/16 start */
+#define BOOT_BACKLIGHT 307
+/* N6 code for HQ-347281 by zhangyundan at 2023/11/16 end */
 static int mtk_set_brightness(struct led_classdev *led_cdev,
 					 enum led_brightness brightness);
 
@@ -354,7 +356,9 @@ int mt_leds_parse_dt(struct mt_led_data *mdev, struct fwnode_handle *fwnode)
 	} else {
 		mdev->conf.cdev.brightness = mdev->conf.cdev.max_brightness * 40 / 100;
 	}
-
+	/* N6 code for HQ-347281 by zhangyundan at 2023/11/16 start */
+	mdev->conf.cdev.brightness = BOOT_BACKLIGHT;
+	/* N6 code for HQ-347281 by zhangyundan at 2023/11/16 end */
 	strlcpy(mdev->desp.name, mdev->conf.cdev.name,
 		sizeof(mdev->desp.name));
 	mdev->desp.index = leds_info->lens;

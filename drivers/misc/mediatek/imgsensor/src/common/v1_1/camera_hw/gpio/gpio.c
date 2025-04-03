@@ -17,11 +17,19 @@ struct GPIO_PINCTRL gpio_pinctrl_list_cam[
 	{"ldo_vcama_0"},
 	{"ldo_vcama1_1"},
 	{"ldo_vcama1_0"},
+	/*N6 code for HQ-306078 by zhaobeidou at 20230707 start*/
+	{"ldo_vcamaf_1"},
+	{"ldo_vcamaf_0"},
+	/*N6 code for HQ-306078 by zhaobeidou at 20230707 end*/
 	{"ldo_vcamd_1"},
 	{"ldo_vcamd_0"},
 	{"ldo_vcamio_1"},
 	{"ldo_vcamio_0"},
 };
+
+/*N6 code for HQ-319146 by huabinchen at 20230815 start*/
+static unsigned int dovdd_count = 0;
+/*N6 code for HQ-319146 by huabinchen at 20230815 end*/
 
 /* for mipi switch platform */
 struct GPIO_PINCTRL gpio_pinctrl_list_switch[
@@ -102,6 +110,10 @@ static enum IMGSENSOR_RETURN gpio_init(
 		}
 	}
 
+/*N6 code for HQ-319146 by huabinchen at 20230815 start*/
+	dovdd_count = 0;
+/*N6 code for HQ-319146 by huabinchen at 20230815 end*/
+
 	return ret;
 }
 
@@ -151,11 +163,31 @@ static enum IMGSENSOR_RETURN gpio_set(
 
 	mutex_lock(pgpio->pgpio_mutex);
 
-	if (ppinctrl_state != NULL && !IS_ERR(ppinctrl_state))
-		pinctrl_select_state(pgpio->ppinctrl, ppinctrl_state);
+
+/*N6 code for HQ-319146 by huabinchen at 20230815 start*/
+	if (ppinctrl_state != NULL && !IS_ERR(ppinctrl_state)) {
+		if (pin == IMGSENSOR_HW_PIN_DOVDD) {
+			pr_info("walf gpio inital count = 0x%x", dovdd_count);
+			if (gpio_state == GPIO_STATE_L) {
+				dovdd_count = dovdd_count & (~(1<<sensor_idx_uint));
+				if (dovdd_count == 0) {
+					pinctrl_select_state(pgpio->ppinctrl, ppinctrl_state);
+				}
+				pr_info("walf gpio GPIO_STATE_L dovdd_count = 0x%x", dovdd_count);
+			} else {//GPIO_STATE_H
+				if (dovdd_count == 0)
+					pinctrl_select_state(pgpio->ppinctrl, ppinctrl_state);//GPIO_STATE_H,always set gpio high
+				dovdd_count = dovdd_count | 1<<sensor_idx_uint;
+				pr_info("walf gpio GPIO_STATE_H dovdd_count = 0x%x", dovdd_count);
+			}
+		} else {
+			pinctrl_select_state(pgpio->ppinctrl, ppinctrl_state);
+		}
+	}
 	else
 		PK_DBG("%s : pinctrl err, PinIdx %d, Val %d\n",
 			__func__, pin, pin_state);
+/*N6 code for HQ-319146 by huabinchen at 20230815 end*/
 
 	mutex_unlock(pgpio->pgpio_mutex);
 

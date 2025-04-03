@@ -1,0 +1,52 @@
+&hq_chg_manager {
+	status = "okay";
+	step_jeita {
+			max_charger_voltage = <12000000>;
+			fv_offset_15_to_35 = <50>;
+			fv_offset_35_to_48 = <60>;
+			iterm = <250>;
+			iterm_ffc_15_to_35 = <1250>;
+			iterm_ffc_35_to_48 = <1350>;
+			ffc_low_tbat = <150>;
+			ffc_high_tbat = <480>;
+			ffc_medium_tbat = <350>;
+			ffc_high_soc = <95>;
+			under_4200_curr_offset = <300>;
+			step_fallback_hyst = <25>;
+			step_forward_hyst = <5>;
+			jeita_fallback_hyst = <5>;
+			jeita_forward_hyst = <5>;
+			jeita_fcc_eu_cfg_limit_minutes = <(-100)	0	700
+								1	50	2400
+								51	100	3400
+								101	150	5900
+								151	350	6666
+								351	480	6666
+								481	580	2400>;
+			jeita_fcc_eu_cfg = <(-100)	0	700
+						1	50	2400
+						51	100	3400
+						101	150	5900
+						151	350	10000
+						351	480	10000
+						481	580	2400>;
+			jeita_fcc_cfg = <(-100)	0	700
+					1	50	2400
+					51	100	3400
+					101	150	5900
+					151	350	6300
+					351	480	6300
+					481	580	2400>;
+			jeita_fv_cfg = <(-100)	0	4472
+					1	50	4480
+					51	100	4480
+					101	150	4480
+					151	350	4480
+					351	480	4470
+					481	580	4470>;
+			step_chg_cfg_cycle = <3600	4250	12400
+						4251	4300	8800
+						4301	4480	7300
+						4481	4530	5900>;
+	};
+};

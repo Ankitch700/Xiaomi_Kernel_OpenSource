@@ -13,7 +13,10 @@
 #include <linux/sched/clock.h>
 #include <linux/timer.h>
 #include <linux/delay.h>
-
+/*N6-U code for HQ-358533 by p-yangmingxi at 20231228 start*/
+#include <linux/sched.h>
+#include <uapi/linux/sched/types.h>
+/*N6-U code for HQ-358533 by p-yangmingxi at 20231228 end*/
 #include <iommu_debug.h>
 
 #include "vcp.h"
@@ -2638,7 +2641,10 @@ static int cmdq_pkt_wait_complete_loop(struct cmdq_pkt *pkt)
 int cmdq_pkt_wait_complete(struct cmdq_pkt *pkt)
 {
 	struct cmdq_flush_item *item = pkt->flush_item;
-
+/*N6-U code for HQ-358533 by p-yangmingxi at 20231228 start*/
+    struct sched_param param = {.sched_priority = 48 };
+    sched_setscheduler(current, SCHED_RR, &param);
+/*N6-U code for HQ-358533 by p-yangmingxi at 20231228 end*/
 	if (!item) {
 		cmdq_err("pkt need flush from flush async ex:0x%p", pkt);
 		return -EINVAL;

@@ -6,3 +6,6 @@ imgsensor_isp6s-objs += \
 	../common/v1_1/camera_hw/regulator/regulator.o \
 	../common/v1_1/camera_hw/gpio/gpio.o \
 	../common/v1_1/camera_hw/mclk/mclk.o
+# N6 code for HQ-309545 by huabinchen at 2023/07/05 start
+imgsensor_isp6s-objs +=  ../common/v1_1/camera_hw/smartldo/smartldo.o
+# N6 code for HQ-309545 by huabinchen at 2023/07/05 end

@@ -87,3 +87,4 @@ config UFSRINGBUF_POC
 	  UFS RingBuffer POC test
 	  1. set default vendor_signature & vendor_parameter for test
 	  2. Set custom vender_parameter
+

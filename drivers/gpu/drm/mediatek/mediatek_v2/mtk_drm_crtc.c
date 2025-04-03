@@ -89,6 +89,11 @@ static struct mtk_drm_property mtk_crtc_property[CRTC_PROP_MAX] = {
 	{DRM_MODE_PROP_ATOMIC, "MSYNC2_0_ENABLE", 0, UINT_MAX, 0},
 	{DRM_MODE_PROP_ATOMIC, "SKIP_CONFIG", 0, UINT_MAX, 0},
 	{DRM_MODE_PROP_ATOMIC, "OVL_DSI_SEQ", 0, UINT_MAX, 0},
+	{DRM_MODE_PROP_ATOMIC, "OUTPUT_SCENARIO", 0, UINT_MAX, 0},
+/* N6 code for HQ-331508 by zhangyundan at 2023/10/17 start */
+	{DRM_MODE_PROP_ATOMIC, "FOD_SYNC_INFO", 0, UINT_MAX, 0},
+/* N6 code for HQ-331508 by zhangyundan at 2023/10/17 end*/
+
 };
 
 static struct cmdq_pkt *sb_cmdq_handle;
@@ -680,6 +685,12 @@ struct mtk_ddp_comp *mtk_crtc_get_comp(struct drm_crtc *crtc,
 		DDPPR_ERR("invalid ddp mode:%d!\n", mtk_crtc->ddp_mode);
 		return NULL;
 	}
+        // N6 code for HQ-336080 by p-liudefu1 at 2023.10.16 start
+	if (unlikely(path_id >= DDP_PATH_NR)) {
+		DDPPR_ERR("invalid path id:%u!\n", path_id);
+		return NULL;
+	}
+        // N6 code for HQ-336080 by p-liudefu1 at 2023.10.16 end
 	return ddp_ctx[mtk_crtc->ddp_mode].ddp_comp[path_id][comp_idx];
 }
 
@@ -1890,19 +1901,23 @@ void _mtk_crtc_wb_addon_module_disconnect(
 	union mtk_addon_config addon_config;
 	int index = drm_crtc_index(crtc);
 	struct mtk_drm_crtc *mtk_crtc = to_mtk_crtc(crtc);
+	struct mtk_crtc_state *state = to_mtk_crtc_state(crtc->state);
+	enum addon_scenario scn;
 
 	if (index != 0 || mtk_crtc_is_dc_mode(crtc))
 		return;
 
-	addon_data = mtk_addon_get_scenario_data(__func__, crtc,
-						WDMA_WRITE_BACK_OVL);
+	if (state->prop_val[CRTC_PROP_OUTPUT_SCENARIO] == 0)
+		scn = WDMA_WRITE_BACK_OVL;
+	else
+		scn = WDMA_WRITE_BACK;
+
+	addon_data = mtk_addon_get_scenario_data(__func__, crtc, scn);
 	if (!addon_data)
 		return;
 
 	if (mtk_crtc->is_dual_pipe) {
-		addon_data_dual = mtk_addon_get_scenario_data_dual
-			(__func__, crtc, WDMA_WRITE_BACK_OVL);
-
+		addon_data_dual = mtk_addon_get_scenario_data_dual(__func__, crtc, scn);
 		if (!addon_data_dual)
 			return;
 	}
@@ -1913,7 +1928,8 @@ void _mtk_crtc_wb_addon_module_disconnect(
 		addon_config.config_type.type = addon_module->type;
 
 		if (addon_module->type == ADDON_AFTER &&
-			addon_module->module == DISP_WDMA0_v2) {
+			(addon_module->module == DISP_WDMA0 ||
+			addon_module->module == DISP_WDMA0_v2)) {
 			if (mtk_crtc->is_dual_pipe) {
 				/* disconnect left pipe */
 				mtk_addon_disconnect_after(crtc, ddp_mode, addon_module,
@@ -2112,20 +2128,29 @@ _mtk_crtc_wb_addon_module_connect(
 	int index = drm_crtc_index(crtc);
 	struct mtk_drm_crtc *mtk_crtc = to_mtk_crtc(crtc);
 	struct mtk_crtc_state *state = to_mtk_crtc_state(crtc->state);
+	enum addon_scenario scn;
 
 	if (index != 0 || mtk_crtc_is_dc_mode(crtc) ||
 		!state->prop_val[CRTC_PROP_OUTPUT_ENABLE])
 		return;
 
-	addon_data = mtk_addon_get_scenario_data(__func__, crtc,
-					WDMA_WRITE_BACK_OVL);
+	if (mtk_crtc->sec_on) {
+		DDPINFO("%s:%d skip wb addon connect due to sec on\n",
+				__func__, __LINE__);
+		return;
+	}
+
+	if (state->prop_val[CRTC_PROP_OUTPUT_SCENARIO] == 0)
+		scn = WDMA_WRITE_BACK_OVL;
+	else
+		scn = WDMA_WRITE_BACK;
+
+	addon_data = mtk_addon_get_scenario_data(__func__, crtc, scn);
 	if (!addon_data)
 		return;
 
 	if (mtk_crtc->is_dual_pipe) {
-		addon_data_dual = mtk_addon_get_scenario_data_dual
-			(__func__, crtc, WDMA_WRITE_BACK_OVL);
-
+		addon_data_dual = mtk_addon_get_scenario_data_dual(__func__, crtc, scn);
 		if (!addon_data_dual)
 			return;
 	}
@@ -2136,7 +2161,8 @@ _mtk_crtc_wb_addon_module_connect(
 		addon_config.config_type.type = addon_module->type;
 
 		if (addon_module->type == ADDON_AFTER &&
-			addon_module->module == DISP_WDMA0_v2) {
+			(addon_module->module == DISP_WDMA0 ||
+			addon_module->module == DISP_WDMA0_v2)) {
 			struct mtk_rect src_roi = {0};
 			struct mtk_rect dst_roi = {0};
 			struct drm_framebuffer *fb;
@@ -8848,8 +8874,10 @@ int mtk_crtc_gce_flush(struct drm_crtc *crtc, void *gce_cb,
 		wb_cb_data = kmalloc(sizeof(*wb_cb_data), GFP_KERNEL);
 
 		mtk_crtc_pkt_create(&handle, crtc, client);
-		cmdq_pkt_wfe(handle, mtk_crtc->gce_obj.event[EVENT_WDMA0_EOF]);
-		_mtk_crtc_wb_addon_module_disconnect(crtc, mtk_crtc->ddp_mode, handle);
+		if (!mtk_crtc->sec_on) {
+			cmdq_pkt_wfe(handle, mtk_crtc->gce_obj.event[EVENT_WDMA0_EOF]);
+			_mtk_crtc_wb_addon_module_disconnect(crtc, mtk_crtc->ddp_mode, handle);
+		}
 
 		wb_cb_data->cmdq_handle = handle;
 		wb_cb_data->crtc = crtc;
@@ -9286,7 +9314,9 @@ static void mtk_drm_crtc_atomic_flush(struct drm_crtc *crtc,
 	}
 
 	hdr_en = (bool)state->prop_val[CRTC_PROP_HDR_ENABLE];
-
+/* N6 code for HQ-331508 by zhangyundan at 2023/10/17 start */
+	mi_drm_crtc_update_layer_state(crtc);
+/* N6 code for HQ-331508 by zhangyundan at 2023/10/17 end*/
 	if (mtk_crtc->fake_layer.fake_layer_mask)
 		mtk_drm_crtc_enable_fake_layer(crtc, old_crtc_state);
 	else if (mtk_crtc->fake_layer.first_dis) {

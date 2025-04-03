@@ -845,6 +845,108 @@ static int clk_mt6765_top_probe(struct platform_device *pdev)
 	return r;
 }
 
+static int clk_mt6765_cam_probe(struct platform_device *pdev)
+{
+	struct clk_onecell_data *clk_data;
+	int r;
+	struct device_node *node = pdev->dev.of_node;
+
+	clk_data = mtk_alloc_clk_data(CLK_CAM_NR_CLK);
+	if (!clk_data)
+		return -ENOMEM;
+
+	mtk_clk_register_gates(node, cam_clks, ARRAY_SIZE(cam_clks), clk_data);
+
+	r = of_clk_add_provider(node, of_clk_src_onecell_get, clk_data);
+
+	if (r)
+		pr_err("%s(): could not register clock provider: %d\n",
+		       __func__, r);
+
+	return r;
+}
+
+static int clk_mt6765_img_probe(struct platform_device *pdev)
+{
+	struct clk_onecell_data *clk_data;
+	int r;
+	struct device_node *node = pdev->dev.of_node;
+
+	clk_data = mtk_alloc_clk_data(CLK_IMG_NR_CLK);
+
+	mtk_clk_register_gates(node, img_clks, ARRAY_SIZE(img_clks), clk_data);
+
+	r = of_clk_add_provider(node, of_clk_src_onecell_get, clk_data);
+
+	if (r)
+		pr_err("%s(): could not register clock provider: %d\n",
+		       __func__, r);
+
+	return r;
+}
+
+static int clk_mt6765_mipi0a_probe(struct platform_device *pdev)
+{
+	struct clk_onecell_data *clk_data;
+	int r;
+	struct device_node *node = pdev->dev.of_node;
+
+	clk_data = mtk_alloc_clk_data(CLK_MIPI0A_NR_CLK);
+
+	mtk_clk_register_gates(node, mipi0a_clks,
+			       ARRAY_SIZE(mipi0a_clks), clk_data);
+
+	r = of_clk_add_provider(node, of_clk_src_onecell_get, clk_data);
+
+	if (r)
+		pr_err("%s(): could not register clock provider: %d\n",
+		       __func__, r);
+
+	return r;
+}
+
+static int clk_mt6765_mm_probe(struct platform_device *pdev)
+{
+	struct clk_onecell_data *clk_data;
+	int r;
+
+	clk_data = mtk_alloc_clk_data(CLK_IFR_NR_CLK);
+	if (!clk_data)
+		return -ENOMEM;
+
+	mtk_clk_register_gates(node, ifr_clks,
+		ARRAY_SIZE(ifr_clks), clk_data);
+	r = of_clk_add_provider(node, of_clk_src_onecell_get, clk_data);
+
+	if (r) {
+		kfree(clk_data);
+		pr_err("%s(): could not register clock provider: %d\n",
+				__func__, r);
+	}
+
+	return r;
+}
+
+static int clk_mt6765_audio_probe(struct platform_device *pdev)
+{
+	struct clk_onecell_data *clk_data;
+	int r;
+	struct device_node *node = pdev->dev.of_node;
+
+	clk_data = mtk_alloc_clk_data(CLK_AUDIO_NR_CLK);
+
+	mtk_clk_register_gates(node, audio_clks,
+			       ARRAY_SIZE(audio_clks), clk_data);
+
+	r = of_clk_add_provider(node, of_clk_src_onecell_get, clk_data);
+
+	if (r)
+		pr_err("%s(): could not register clock provider: %d\n",
+		       __func__, r);
+
+	return r;
+}
+
 static int clk_mt6765_ifr_probe(struct platform_device *pdev)
 {
 	struct clk_onecell_data *clk_data;

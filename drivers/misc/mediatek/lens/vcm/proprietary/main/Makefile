@@ -66,4 +66,8 @@ mainaf-y  += common/bu63169af/OIS_func.o
 mainaf-y  += common/bu63169af/OIS_main.o
 mainaf-y  += common/bu63169af/OIS_user.o
 mainaf-y  += common/bu64253gwzaf/BU64253GWZAF.o
+mainaf-y  += common/emerald_gt9764vaf/EMERALD_GT9764VAF.o
+mainaf-y  += common/emerald_dw9800vaf/EMERALD_DW9800VAF.o
+mainaf-y  += common/emerald_gt9764bavaf/EMERALD_GT9764BAVAF.o
+mainaf-y  += common/emerald_ak7314af/EMERALD_AK7314AF.o
 

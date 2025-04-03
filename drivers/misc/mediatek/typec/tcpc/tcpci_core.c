@@ -1,6 +1,16 @@
-// SPDX-License-Identifier: GPL-2.0
 /*
- * Copyright (c) 2020 MediaTek Inc.
+ * Copyright (C) 2020 Richtek Inc.
+ *
+ * Richtek TypeC Port Control Interface Core Driver
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License for more details.
  */
 
 #include <linux/init.h>
@@ -18,12 +28,14 @@
 #if IS_ENABLED(CONFIG_USB_POWER_DELIVERY)
 #include "pd_dpm_prv.h"
 #include "inc/tcpm.h"
-#if CONFIG_RECV_BAT_ABSENT_NOTIFY
+#ifdef CONFIG_RECV_BAT_ABSENT_NOTIFY
 #include "mtk_battery.h"
 #endif /* CONFIG_RECV_BAT_ABSENT_NOTIFY */
 #endif /* CONFIG_USB_POWER_DELIVERY */
 
-#define TCPC_CORE_VERSION		"2.0.16_MTK"
+#define TCPC_CORE_VERSION		"2.0.18_G"
+
+extern int power_off_mode;
 
 static ssize_t tcpc_show_property(struct device *dev,
 				  struct device_attribute *attr, char *buf);
@@ -87,7 +99,7 @@ static ssize_t tcpc_show_property(struct device *dev,
 {
 	struct tcpc_device *tcpc = to_tcpc_device(dev);
 	const ptrdiff_t offset = attr - tcpc_device_attributes;
-	int i = 0, ret;
+	int i = 0;
 #if IS_ENABLED(CONFIG_USB_POWER_DELIVERY)
 	struct pe_data *pe_data;
 	struct pd_port *pd_port;
@@ -99,131 +111,84 @@ static ssize_t tcpc_show_property(struct device *dev,
 	case TCPC_DESC_CAP_INFO:
 		pd_port = &tcpc->pd_port;
 		pe_data = &pd_port->pe_data;
-		ret = snprintf(buf+strlen(buf), 256, "%s = %d\n%s = %d\n",
-				"local_selected_cap",
-				pe_data->local_selected_cap,
-				"remote_selected_cap",
-				pe_data->remote_selected_cap);
-		if (ret < 0)
-			break;
-		ret = snprintf(buf+strlen(buf), 256, "%s\n",
+		snprintf(buf+strlen(buf), 256, "selected_cap = %d\n",
+			pe_data->selected_cap);
+
+		snprintf(buf+strlen(buf), 256, "%s\n",
 				"local_src_cap(type, vmin, vmax, oper)");
-		if (ret < 0)
-			break;
 		for (i = 0; i < pd_port->local_src_cap.nr; i++) {
 			tcpm_extract_power_cap_val(
 				pd_port->local_src_cap.pdos[i],
 				&cap);
-			ret = snprintf(buf+strlen(buf), 256, "%d %d %d %d\n",
-				      cap.type, cap.min_mv, cap.max_mv, cap.ma);
-			if (ret < 0)
-				break;
+			snprintf(buf+strlen(buf), 256, "%d %d %d %d\n",
+				cap.type, cap.min_mv, cap.max_mv, cap.ma);
 		}
-		ret = snprintf(buf+strlen(buf), 256, "%s\n",
+		snprintf(buf+strlen(buf), 256, "%s\n",
 				"local_snk_cap(type, vmin, vmax, ioper)");
-		if (ret < 0)
-			break;
 		for (i = 0; i < pd_port->local_snk_cap.nr; i++) {
 			tcpm_extract_power_cap_val(
 				pd_port->local_snk_cap.pdos[i],
 				&cap);
-			ret = snprintf(buf+strlen(buf), 256, "%d %d %d %d\n",
-				      cap.type, cap.min_mv, cap.max_mv, cap.ma);
-			if (ret < 0)
-				break;
+			snprintf(buf+strlen(buf), 256, "%d %d %d %d\n",
+				cap.type, cap.min_mv, cap.max_mv, cap.ma);
 		}
-		ret = snprintf(buf+strlen(buf), 256, "%s\n",
+		snprintf(buf+strlen(buf), 256, "%s\n",
 				"remote_src_cap(type, vmin, vmax, ioper)");
-		if (ret < 0)
-			break;
 		for (i = 0; i < pe_data->remote_src_cap.nr; i++) {
 			tcpm_extract_power_cap_val(
 				pe_data->remote_src_cap.pdos[i],
 				&cap);
-			ret = snprintf(buf+strlen(buf), 256, "%d %d %d %d\n",
-				      cap.type, cap.min_mv, cap.max_mv, cap.ma);
-			if (ret < 0)
-				break;
+			snprintf(buf+strlen(buf), 256, "%d %d %d %d\n",
+				cap.type, cap.min_mv, cap.max_mv, cap.ma);
 		}
-		ret = snprintf(buf+strlen(buf), 256, "%s\n",
+		snprintf(buf+strlen(buf), 256, "%s\n",
 				"remote_snk_cap(type, vmin, vmax, ioper)");
-		if (ret < 0)
-			break;
 		for (i = 0; i < pe_data->remote_snk_cap.nr; i++) {
 			tcpm_extract_power_cap_val(
 				pe_data->remote_snk_cap.pdos[i],
 				&cap);
-			ret = snprintf(buf+strlen(buf), 256, "%d %d %d %d\n",
-				      cap.type, cap.min_mv, cap.max_mv, cap.ma);
-			if (ret < 0)
-				break;
+			snprintf(buf+strlen(buf), 256, "%d %d %d %d\n",
+				cap.type, cap.min_mv, cap.max_mv, cap.ma);
 		}
 		break;
 #endif	/* CONFIG_USB_POWER_DELIVERY */
 	case TCPC_DESC_ROLE_DEF:
-		ret = snprintf(buf, 256, "%s\n", role_text[tcpc->desc.role_def]);
-		if (ret < 0)
-			break;
+		snprintf(buf, 256, "%s\n", role_text[tcpc->desc.role_def]);
 		break;
 	case TCPC_DESC_RP_LEVEL:
-		if (tcpc->typec_local_rp_level == TYPEC_CC_RP_DFT) {
-			ret = snprintf(buf, 256, "%s\n", "Default");
-			if (ret < 0)
-				break;
-		} else if (tcpc->typec_local_rp_level == TYPEC_CC_RP_1_5) {
-			ret = snprintf(buf, 256, "%s\n", "1.5");
-			if (ret < 0)
-				break;
-		} else if (tcpc->typec_local_rp_level == TYPEC_CC_RP_3_0) {
-			ret = snprintf(buf, 256, "%s\n", "3.0");
-			if (ret < 0)
-				break;
-		}
+		if (tcpc->typec_local_rp_level == TYPEC_RP_DFT)
+			snprintf(buf, 256, "%s\n", "Default");
+		else if (tcpc->typec_local_rp_level == TYPEC_RP_1_5)
+			snprintf(buf, 256, "%s\n", "1.5");
+		else if (tcpc->typec_local_rp_level == TYPEC_RP_3_0)
+			snprintf(buf, 256, "%s\n", "3.0");
 		break;
 	case TCPC_DESC_PD_TEST:
-		ret = snprintf(buf, 256, "%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n",
-				"1: pr_swap", "2: dr_swap", "3: vconn_swap",
-				"4: soft reset", "5: hard reset",
-				"6: get_src_cap", "7: get_sink_cap",
-				"8: discover_id", "9: discover_cable");
-		if (ret < 0)
-			dev_dbg(dev, "%s: ret=%d\n", __func__, ret);
+		snprintf(buf, 256, "%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s\n",
+			"1: pr_swap", "2: dr_swap", "3: vconn_swap",
+			"4: soft reset", "5: hard reset",
+			"6: get_src_cap", "7: get_sink_cap",
+			"8: discover_id", "9: discover_cable");
 		break;
 	case TCPC_DESC_INFO:
 		i += snprintf(buf + i,
 			256, "|^|==( %s info )==|^|\n", tcpc->desc.name);
-		if (i < 0)
-			break;
 		i += snprintf(buf + i,
 			256, "role = %s\n", role_text[tcpc->desc.role_def]);
-		if (i < 0)
-			break;
-		if (tcpc->typec_local_rp_level == TYPEC_CC_RP_DFT) {
+		if (tcpc->typec_local_rp_level == TYPEC_RP_DFT)
 			i += snprintf(buf + i, 256, "rplvl = %s\n", "Default");
-			if (i < 0)
-				break;
-		} else if (tcpc->typec_local_rp_level == TYPEC_CC_RP_1_5) {
+		else if (tcpc->typec_local_rp_level == TYPEC_RP_1_5)
 			i += snprintf(buf + i, 256, "rplvl = %s\n", "1.5");
-			if (i < 0)
-				break;
-		} else if (tcpc->typec_local_rp_level == TYPEC_CC_RP_3_0) {
+		else if (tcpc->typec_local_rp_level == TYPEC_RP_3_0)
 			i += snprintf(buf + i, 256, "rplvl = %s\n", "3.0");
-			if (i < 0)
-				break;
-		}
 		break;
 #if IS_ENABLED(CONFIG_USB_POWER_DELIVERY)
 	case TCPC_DESC_PE_READY:
 		pd_port = &tcpc->pd_port;
-		if (pd_port->pe_data.pe_ready) {
-			ret = snprintf(buf, 256, "%s\n", "yes");
-			if (ret < 0)
-				break;
-		} else {
-			ret = snprintf(buf, 256, "%s\n", "no");
-			if (ret < 0)
-				break;
-		}
+		if (pd_port->pe_data.pe_ready)
+			snprintf(buf, 256, "%s\n", "yes");
+		else
+			snprintf(buf, 256, "%s\n", "no");
 		break;
 #endif
 	default:
@@ -261,7 +226,7 @@ static ssize_t tcpc_store_property(struct device *dev,
 	struct tcpc_device *tcpc = to_tcpc_device(dev);
 	const ptrdiff_t offset = attr - tcpc_device_attributes;
 	int ret;
-	long val;
+	long int val;
 
 	switch (offset) {
 	case TCPC_DESC_ROLE_DEF:
@@ -279,15 +244,8 @@ static ssize_t tcpc_store_property(struct device *dev,
 			dev_err(dev, "get parameters fail\n");
 			return -EINVAL;
 		}
-		#if IS_ENABLED(CONFIG_USB_POWER_DELIVERY)
-		if (val > 0 && val <= PD_PE_TIMER_END_ID)
-			pd_enable_timer(&tcpc->pd_port, val);
-		else if (val > PD_PE_TIMER_END_ID && val < PD_TIMER_NR)
+		if (val >= 0 && val < PD_TIMER_NR)
 			tcpc_enable_timer(tcpc, val);
-		#else
-		if (val > 0 && val < PD_TIMER_NR)
-			tcpc_enable_timer(tcpc, val);
-		#endif /* CONFIG_USB_POWER_DELIVERY */
 		break;
 	#if IS_ENABLED(CONFIG_USB_POWER_DELIVERY)
 	case TCPC_DESC_PD_TEST:
@@ -382,7 +340,9 @@ static void tcpc_device_release(struct device *dev)
 	/* Do initialization */
 }
 
+/* N19A code for HQ- by wumingzhu at 20240321 start */
 static void tcpc_init_work(struct work_struct *work);
+/* N19A code for HQ- by wumingzhu at 20240321 end */
 static void tcpc_event_init_work(struct work_struct *work);
 
 struct tcpc_device *tcpc_device_register(struct device *parent,
@@ -394,7 +354,7 @@ struct tcpc_device *tcpc_device_register(struct device *parent,
 	pr_info("%s register tcpc device (%s)\n", __func__, tcpc_desc->name);
 	tcpc = devm_kzalloc(parent, sizeof(*tcpc), GFP_KERNEL);
 	if (!tcpc) {
-		pr_err("%s : allocate tcpc memory failed\n", __func__);
+		pr_err("%s : allocate tcpc memeory failed\n", __func__);
 		return NULL;
 	}
 
@@ -402,12 +362,10 @@ struct tcpc_device *tcpc_device_register(struct device *parent,
 	for (i = 0; i < TCP_NOTIFY_IDX_NR; i++)
 		srcu_init_notifier_head(&tcpc->evt_nh[i]);
 
-	init_completion(&tcpc->alert_done);
 	mutex_init(&tcpc->access_lock);
 	mutex_init(&tcpc->typec_lock);
 	mutex_init(&tcpc->timer_lock);
 	mutex_init(&tcpc->mr_lock);
-	sema_init(&tcpc->timer_enable_mask_lock, 1);
 	spin_lock_init(&tcpc->timer_tick_lock);
 
 	tcpc->dev.class = tcpc_class;
@@ -420,12 +378,31 @@ struct tcpc_device *tcpc_device_register(struct device *parent,
 	tcpc->desc = *tcpc_desc;
 	tcpc->ops = ops;
 	tcpc->typec_local_rp_level = tcpc_desc->rp_lvl;
+	/* N19A code for HQ-380111 by p-yanzelin at 20240423 start */
+#if defined(CONFIG_PR_SWAP_FOR_NU6601)
+	tcpc->g_flag_role_swap = false;
+#endif
+	/* N19A code for HQ-380111 by p-yanzelin at 20240423 end */
+	tcpc->typec_remote_rp_level = TYPEC_CC_VOLT_SNK_DFT;
+	tcpc->typec_polarity = false;
 
-#if CONFIG_TCPC_VCONN_SUPPLY_MODE
+#ifdef CONFIG_TCPC_VCONN_SUPPLY_MODE
 	tcpc->tcpc_vconn_supply = tcpc_desc->vconn_supply;
 #endif	/* CONFIG_TCPC_VCONN_SUPPLY_MODE */
 
 	device_set_of_node_from_dev(&tcpc->dev, parent);
+
+	/* N19A code for HQ- by wumingzhu at 20240321 start */
+	INIT_DELAYED_WORK(&tcpc->init_work, tcpc_init_work);
+	/* N19A code for HQ- by wumingzhu at 20240321 end */
+	INIT_DELAYED_WORK(&tcpc->event_init_work, tcpc_event_init_work);
+
+	tcpc->attach_wake_lock =
+		wakeup_source_register(&tcpc->dev, "tcpc_attach_wake_lock");
+	tcpc->detach_wake_lock =
+		wakeup_source_register(&tcpc->dev, "tcpc_detach_wake_lock");
+
+	tcpci_timer_init(tcpc);
 
 	ret = device_register(&tcpc->dev);
 	if (ret) {
@@ -433,21 +410,15 @@ struct tcpc_device *tcpc_device_register(struct device *parent,
 		return ERR_PTR(ret);
 	}
 
-	INIT_DELAYED_WORK(&tcpc->init_work, tcpc_init_work);
-	INIT_DELAYED_WORK(&tcpc->event_init_work, tcpc_event_init_work);
-
-	/* If system support "WAKE_LOCK_IDLE",
-	 * please use it instead of "WAKE_LOCK_SUSPEND"
-	 */
-	tcpc->attach_wake_lock =
-		wakeup_source_register(NULL, "tcpc_attach_wake_lock");
-	tcpc->detach_wake_lock =
-		wakeup_source_register(NULL, "tcpc_detach_wake_lock");
-
-	tcpci_timer_init(tcpc);
 #if IS_ENABLED(CONFIG_USB_POWER_DELIVERY)
 	pd_core_init(tcpc);
 #endif /* CONFIG_USB_POWER_DELIVERY */
+
+#ifdef CONFIG_DUAL_ROLE_USB_INTF
+	ret = tcpc_dual_role_phy_init(tcpc);
+	if (ret < 0)
+		dev_err(&tcpc->dev, "dual role usb init fail\n");
+#endif /* CONFIG_DUAL_ROLE_USB_INTF */
 
 	return tcpc;
 }
@@ -456,10 +427,11 @@ EXPORT_SYMBOL(tcpc_device_register);
 int tcpc_device_irq_enable(struct tcpc_device *tcpc)
 {
 	int ret;
+	int schedule_time=0;
 
 	if (!tcpc->ops->init) {
 		pr_notice("%s Please implment tcpc ops init function\n",
-		__func__);
+			  __func__);
 		return -EINVAL;
 	}
 
@@ -470,7 +442,13 @@ int tcpc_device_irq_enable(struct tcpc_device *tcpc)
 		pr_err("%s tcpc init fail\n", __func__);
 		return ret;
 	}
-
+/*
+	tcpci_set_watchdog(tcpc, true);
+	tcpci_set_cc(tcpc, TYPEC_CC_OPEN);
+	mdelay(50);
+	tcpci_set_cc(tcpc, TYPEC_CC_RD);
+	tcpci_set_watchdog(tcpc, false);
+*/
 	ret = tcpc_typec_init(tcpc, tcpc->desc.role_def);
 	tcpci_unlock_typec(tcpc);
 	if (ret < 0) {
@@ -478,15 +456,21 @@ int tcpc_device_irq_enable(struct tcpc_device *tcpc)
 		return ret;
 	}
 
-	schedule_delayed_work(
-		&tcpc->event_init_work, msecs_to_jiffies(10*1000));
+	//+ ExtB oak-9664, tankaikun@wt, modify 20220418, fix pd charger type identify slowly when power off charge
+	if(power_off_mode)
+		schedule_time = 500;
+	else
+		schedule_time = 10*1000;
+
+	schedule_delayed_work(&tcpc->event_init_work, 0);
+	//- ExtB oak-9664, tankaikun@wt, modify 20220418, fix pd charger type identify slowly when power off charge
 
 	pr_info("%s : tcpc irq enable OK!\n", __func__);
 	return 0;
 }
 EXPORT_SYMBOL(tcpc_device_irq_enable);
 
-#if CONFIG_USB_PD_REV30
+#ifdef CONFIG_USB_PD_REV30
 static void bat_update_work_func(struct work_struct *work)
 {
 	struct tcpc_device *tcpc = container_of(work,
@@ -547,29 +531,28 @@ static void tcpc_event_init_work(struct work_struct *work)
 #if IS_ENABLED(CONFIG_USB_POWER_DELIVERY)
 	struct tcpc_device *tcpc = container_of(
 			work, struct tcpc_device, event_init_work.work);
-#if CONFIG_USB_PD_REV30
+#ifdef CONFIG_USB_PD_REV30
 	int retval;
 #endif /* CONFIG_USB_PD_REV30 */
 
 	tcpci_lock_typec(tcpc);
 	tcpci_event_init(tcpc);
-#if CONFIG_USB_PD_WAIT_BC12
-	tcpc->chg_psy = devm_power_supply_get_by_phandle(
-		tcpc->dev.parent, "charger");
-	if (IS_ERR_OR_NULL(tcpc->chg_psy)) {
+#ifdef CONFIG_USB_PD_WAIT_BC12
+	tcpc->usb_psy = power_supply_get_by_name("usb");
+	if (!tcpc->usb_psy) {
 		tcpci_unlock_typec(tcpc);
-		TCPC_ERR("%s get charger psy fail\n", __func__);
+		TCPC_ERR("%s get usb psy fail\n", __func__);
 		return;
 	}
 #endif /* CONFIG_USB_PD_WAIT_BC12 */
-	tcpc->pd_inited_flag = 1; /* MTK Only */
+	tcpc->pd_inited_flag = 1;
 	pr_info("%s typec attach new = %d\n",
 			__func__, tcpc->typec_attach_new);
 	if (tcpc->typec_attach_new)
 		pd_put_cc_attached_event(tcpc, tcpc->typec_attach_new);
 	tcpci_unlock_typec(tcpc);
 
-#if CONFIG_USB_PD_REV30
+#ifdef CONFIG_USB_PD_REV30
 	INIT_DELAYED_WORK(&tcpc->bat_update_work, bat_update_work_func);
 	tcpc->bat_psy = power_supply_get_by_name("battery");
 	if (!tcpc->bat_psy) {
@@ -587,36 +570,6 @@ static void tcpc_event_init_work(struct work_struct *work)
 
 #endif /* CONFIG_USB_POWER_DELIVERY */
 }
-
-static void tcpc_init_work(struct work_struct *work)
-{
-	struct tcpc_device *tcpc = container_of(
-		work, struct tcpc_device, init_work.work);
-
-#if !CONFIG_TCPC_NOTIFIER_LATE_SYNC
-	if (tcpc->desc.notifier_supply_num == 0)
-		return;
-#endif
-	pr_info("%s force start\n", __func__);
-
-	tcpc->desc.notifier_supply_num = 0;
-	tcpc_device_irq_enable(tcpc);
-}
-
-int tcpc_schedule_init_work(struct tcpc_device *tcpc)
-{
-#if !CONFIG_TCPC_NOTIFIER_LATE_SYNC
-	if (tcpc->desc.notifier_supply_num == 0)
-		return tcpc_device_irq_enable(tcpc);
-
-	pr_info("%s wait %d num\n", __func__, tcpc->desc.notifier_supply_num);
-
-	schedule_delayed_work(
-		&tcpc->init_work, msecs_to_jiffies(30*1000));
-#endif
-	return 0;
-}
-EXPORT_SYMBOL(tcpc_schedule_init_work);
 
 struct tcp_notifier_block_wrapper {
 	struct notifier_block stub_nb;
@@ -727,21 +680,6 @@ int register_tcp_dev_notifier(struct tcpc_device *tcp_dev,
 		}
 	}
 
-#if !CONFIG_TCPC_NOTIFIER_LATE_SYNC
-	if (tcp_dev->desc.notifier_supply_num == 0) {
-		pr_info("%s already started\n", __func__);
-		return 0;
-	}
-
-	tcp_dev->desc.notifier_supply_num--;
-	pr_info("%s supply_num = %d\n", __func__,
-		tcp_dev->desc.notifier_supply_num);
-
-	if (tcp_dev->desc.notifier_supply_num == 0) {
-		cancel_delayed_work(&tcp_dev->init_work);
-		tcpc_device_irq_enable(tcp_dev);
-	}
-#endif
 	return ret;
 }
 EXPORT_SYMBOL(register_tcp_dev_notifier);
@@ -819,11 +757,15 @@ void tcpc_device_unregister(struct device *dev, struct tcpc_device *tcpc)
 
 	tcpc_typec_deinit(tcpc);
 
-#if CONFIG_USB_PD_REV30
+#ifdef CONFIG_USB_PD_REV30
 	wakeup_source_unregister(tcpc->pd_port.pps_request_wake_lock);
 #endif /* CONFIG_USB_PD_REV30 */
 	wakeup_source_unregister(tcpc->detach_wake_lock);
 	wakeup_source_unregister(tcpc->attach_wake_lock);
+
+#ifdef CONFIG_DUAL_ROLE_USB_INTF
+	devm_dual_role_instance_unregister(&tcpc->dev, tcpc->dr_usb);
+#endif /* CONFIG_DUAL_ROLE_USB_INTF */
 
 	device_unregister(&tcpc->dev);
 
@@ -886,19 +828,111 @@ static void __exit tcpc_class_exit(void)
 subsys_initcall(tcpc_class_init);
 module_exit(tcpc_class_exit);
 
+#if IS_ENABLED(CONFIG_USB_POWER_DELIVERY)
+#ifdef CONFIG_RECV_BAT_ABSENT_NOTIFY
+static int fg_bat_notifier_call(struct notifier_block *nb,
+				unsigned long event, void *data)
+{
+	struct pd_port *pd_port = container_of(nb, struct pd_port, fg_bat_nb);
+	struct tcpc_device *tcpc = pd_port->tcpc;
+
+	switch (event) {
+	case EVENT_BATTERY_PLUG_OUT:
+		dev_info(&tcpc->dev, "%s: fg battery absent\n", __func__);
+		schedule_work(&pd_port->fg_bat_work);
+		break;
+	default:
+		break;
+	}
+	return NOTIFY_OK;
+}
+#endif /* CONFIG_RECV_BAT_ABSENT_NOTIFY */
+#endif /* CONFIG_USB_POWER_DELIVERY */
+ 
+/* N19A code for HQ- by wumingzhu at 20240321 start */
+static void tcpc_init_work(struct work_struct *work)
+{
+	struct tcpc_device *tcpc = container_of(
+		work, struct tcpc_device, init_work.work);
+
+#ifndef CONFIG_TCPC_NOTIFIER_LATE_SYNC
+	if (tcpc->desc.notifier_supply_num == 0)
+		return;
+#endif
+	pr_info("%s force start\n", __func__);
+
+	tcpc->desc.notifier_supply_num = 0;
+	tcpc_device_irq_enable(tcpc);
+}
+
+int tcpc_schedule_init_work(struct tcpc_device *tcpc)
+{
+#ifndef CONFIG_TCPC_NOTIFIER_LATE_SYNC
+	if (tcpc->desc.notifier_supply_num == 0)
+		return tcpc_device_irq_enable(tcpc);
+
+	pr_info("%s wait %d num\n", __func__, tcpc->desc.notifier_supply_num);
+
+	schedule_delayed_work(
+		&tcpc->init_work, msecs_to_jiffies(30*1000));
+	
+	pr_info("%s wait \n", __func__);
+#endif
+	return 0;
+}
+EXPORT_SYMBOL(tcpc_schedule_init_work);
+/* N19A code for HQ- by wumingzhu at 20240321 end */
+
+void __attribute__((weak)) sched_set_fifo(struct task_struct *p)
+{
+	struct sched_param sp = { .sched_priority = MAX_RT_PRIO / 2 };
+	WARN_ON_ONCE(sched_setscheduler_nocheck(p, SCHED_FIFO, &sp) != 0);
+}
+
 MODULE_DESCRIPTION("Richtek TypeC Port Control Core");
 MODULE_AUTHOR("Jeff Chang <jeff_chang@richtek.com>");
 MODULE_VERSION(TCPC_CORE_VERSION);
 MODULE_LICENSE("GPL");
 
 /* Release Version
- * 2.0.16_MTK
+ * 2.0.18_G
+ * (1) Fix typos
+ * (2) Revise tcpci_alert.c
+ * (3) Request the previous voltage/current first with new Source_Capabilities
+ * (4) #undef CONFIG_USB_PD_WAIT_BC12 and CONFIG_USB_PD_ALT_MODE_RTDC
+ * (5) Use typec_state in typec_is_cc_attach()
+ * (6) Add epr_source_pdp into struct pd_source_cap_ext for new PD spec
+ * (7) Revise get_status_once, pd_traffic_idle
+ * (8) Revise IRQ handling
+ * (9) Start PD policy engine without delay
+ * (10) Revise typec_remote_rp_level
+ * (11) Revise Hard Reset timer as PD Sink
+ * (12) Set mismatch to false in dpm_build_default_request_info()
+ * (13) Revise tcpc_timer
+ * (14) Remove notifier_supply_num
+ * (15) Fix COMMON.CHECK.PD.5 Check Unexpected Messages and Signals
+ * (16) Fix TEST.PD.PROT.PORT3.4 Invalid Battery Capabilities Reference
+ * (17) Fix TEST.PD.VDM.SRC.1 Discovery Process and Enter Mode
+ * (18) Add PD_TIMER_VSAFE5V_DELAY
+ * (19) Revise SOP' communication
+ * (20) Revise PD request as Sink
+ * (21) Disable old legacy cable workaround
+ * (22) Enable PD Safe0V Timeout
+ * (23) Replace calling of sched_setscheduler() with sched_set_fifo()
+ *
+ * 2.0.17_G
+ * (1) Add CONFIG_TYPEC_LEGACY3_ALWAYS_LOCAL_RP
+ * (2) Fix a synchronization/locking problem in pd_notify_pe_error_recovery()
+ * (3) Add USB_VID_MQP
+ * (4) Revise the return value checking of tcpc_device_register()
+ *
+ * 2.0.16_G
  * (1) Check the return value of wait_event_interruptible()
  * (2) Revise *_get_cc()
  * (3) Revise role_def
  * (4) Fix COMMON.CHECK.PD.10
  *
- * 2.0.15_MTK
+ * 2.0.15_G
  * (1) undef CONFIG_COMPATIBLE_APPLE_TA
  * (2) Fix TEST.PD.PROT.ALL.5 Unrecognized Message (PD2)
  * (3) Fix TEST.PD.PROT.ALL3.3 Invalid Manufacturer Info Target
@@ -913,24 +947,23 @@ MODULE_LICENSE("GPL");
  * (12) Change wait_event() back to wait_event_interruptible() for not being
  *	detected as hung tasks
  *
- * 2.0.14_MTK
+ * 2.0.14_G
  * (1) Move out typec_port registration and operation to rt_pd_manager.c
  * (2) Rename CONFIG_TYPEC_WAIT_BC12 to CONFIG_USB_PD_WAIT_BC12
  * (3) Not to set power/data/vconn role repeatedly
  * (4) Revise vconn highV protection
  * (5) Revise tcpc timer
- * (6) Reduce IBUS Iq for MT6371, MT6372 and MT6360
- * (7) Decrease VBUS present threshold (VBUS_CAL) by 60mV (2LSBs) for RT171x
- * (8) Replace \r\n with \n for resolving logs without newlines
- * (9) Remove the member time_stamp from struct pd_msg
- * (10) Remove NoResponseTimer as Sink for new PD spec
- * (11) Revise responses of Reject and Not_Supported
- * (12) Revise the usages of pd_traffic_control and typec_power_ctrl
- * (13) Revise the usages of wait_event_*()
- * (14) Add PD capability for TYPEC_ATTACHED_DBGACC_SNK
- * (15) Utilize rt-regmap to reduce I2C accesses
+ * (6) Decrease VBUS present threshold (VBUS_CAL) by 60mV (2LSBs) for RT171x
+ * (7) Replace \r\n with \n for resolving logs without newlines
+ * (8) Remove the member time_stamp from struct pd_msg
+ * (9) Remove NoResponseTimer as Sink for new PD spec
+ * (10) Revise responses of Reject and Not_Supported
+ * (11) Revise the usages of pd_traffic_control and typec_power_ctrl
+ * (12) Revise the usages of wait_event_*()
+ * (13) Add PD capability for TYPEC_ATTACHED_DBGACC_SNK
+ * (14) Utilize rt-regmap to reduce I2C accesses
  *
- * 2.0.13_MTK
+ * 2.0.13_G
  * (1) Add TCPC flags for VCONN_SAFE5V_ONLY
  * (2) Add boolean property attempt_discover_svid in dts/dtsi
  * (3) Add a TCPM API for postponing Type-C role change until unattached
@@ -943,8 +976,8 @@ MODULE_LICENSE("GPL");
  * (8) Re-fetch triggered_timer and enable_mask after lock acquisition
  * (9) Leave low power mode only when CC is detached
  * (10) Revise code related to pd_check_rev30()
- * (11) Bypass BC1.2 for PR_SWAP from Source to Sink
- * (12) Support charging icon for AudioAccessory
+ * (11) Bypass BC1.2 for PR_SWAP from Source to Sink (MTK only)
+ * (12) Support charging icon for AudioAccessory (MTK only)
  * (13) Replace tcpc_dev with tcpc
  * (14) TCPCI Alert V10 and V20 co-exist
  * (15) Resolve DP Source/Sink Both Connected when acting as DFP_U
@@ -957,59 +990,58 @@ MODULE_LICENSE("GPL");
  * (22) Disable auto idle mode before entering low power mode
  * (23) Reset Protocol FSM and clear RX alerts twice before clock gating
  *
- * 2.0.12_MTK
+ * 2.0.12_G
  * (1) Fix voltage/current steps of RDO for APDO
  * (2) Non-blocking TCPC notification by default
  * (3) Fix synchronization/locking problems
  * (4) Fix NoRp.SRC support
  *
- * 2.0.11_MTK
+ * 2.0.11_G
  * (1) Fix PD compliance failures of Ellisys and MQP
  * (2) Wait the result of BC1.2 before starting PD policy engine
  * (3) Fix compile warnings
  * (4) Fix NoRp.SRC support
  *
- * 2.0.10_MTK
+ * 2.0.10_G
  * (1) fix battery noitifier plug out cause recursive locking detected in
  *     nh->srcu.
  *
- * 2.0.9_MTK
+ * 2.0.9_G
  * (1) fix 10k A-to-C legacy cable workaround side effect when
  *     cable plug in at worakround flow.
  *
- * 2.0.8_MTK
+ * 2.0.8_G
  * (1) fix timeout thread flow for wakeup pd event thread
  *     after disable timer first.
  *
- * 2.0.7_MTK
+ * 2.0.7_G
  * (1) add extract pd source capability pdo defined in
  *     PD30 v1.1 ECN for pe40 get apdo profile.
  *
- * 2.0.6_MTK
+ * 2.0.6_G
  * (1) register battery notifier for battery plug out
  *     avoid TA hardreset 3 times will show charing icon.
  *
- * 2.0.5_MTK
+ * 2.0.5_G
  * (1) add CONFIG_TYPEC_CAP_NORP_SRC to support
  *      A-to-C No-Rp cable.
  * (2) add handler pd eint with eint mask
  *
- * 2.0.4_MTK
+ * 2.0.4_G
  * (1) add CONFIG_TCPC_NOTIFIER_LATE_SYNC to
  *      move irq_enable to late_initcall_sync stage
  *      to prevent from notifier_supply_num setting wrong.
  *
- * 2.0.3_MTK
+ * 2.0.3_G
  * (1) use local_irq_XXX to instead raw_local_irq_XXX
  *      to fix lock prov WARNING
  * (2) Remove unnecessary charger detect flow. it does
  *      not need to switch BC1-2 path on otg_en
  *
- * 2.0.2_MTK
+ * 2.0.2_G
  * (1) Fix Coverity and check patch issue
  * (2) Fix 32-bit project build error
  *
- * 2.0.1_MTK
- *	First released PD3.0 Driver for MTK Platform
+ * 2.0.1_G
+ *	First released PD3.0 Driver
  */
-

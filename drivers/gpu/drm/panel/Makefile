@@ -86,6 +86,14 @@ obj-$(CONFIG_DRM_PANEL_SAMSUNG_S68FC01_VDO_AOD) += panel-samsung-s68fc01-vdo-aod
 obj-$(CONFIG_DRM_PANEL_ALPHA_SAMSUNG_S6E3HAE_CMD_120HZ) += panel-alpha-samsung-s6e3hae-wqhd-dphy-cmd-120hz.o
 obj-$(CONFIG_DRM_PANEL_TIANMA_NT36672C_CPHY_VDO_90HZ_RT4801) += panel-tianma-nt36672c-cphy-vdo-90hz-rt4801.o
 obj-$(CONFIG_DRM_PANEL_NT37801_MSYNC2_RTE) += panel-nt37801-msync2-rte.o
+# N6 code for HQ-301708 by zhengjie at 2023/7/5 start
+obj-$(CONFIG_DRM_PANEL_N6_42_0D_0A_DSC_VDO) += panel-n6-42-0d-0a-dsc-vdo.o
+# N6 code for HQ-301708 by zhengjie at 2023/7/5 end
+# N6 code for HQ-305068 by zhengjie at 2023/9/19 start
+# N6 code for HQ-339295 by zhengjie at 2023/10/20 start
+obj-$(CONFIG_DRM_PANEL_N6_41_02_0B_DSC_VDO) += panel-n6-41-02-0b-dsc-vdo.o
+# N6 code for HQ-339295 by zhengjie at 2023/10/20 end
+# N6 code for HQ-305068 by zhengjie at 2023/9/19 end
 
 mediatek-drm-gateic-y := mtk_drm_panel_i2c.o \
 		  mtk_drm_gateic_rt4801h.o \
@@ -107,3 +115,8 @@ obj-$(CONFIG_DRM_MEDIATEK_PANEL) += mediatek-drm-gateic.o
 obj-$(CONFIG_DRM_MEDIATEK_PANEL) += mediatek-drm-panel-drv.o
 
 ccflags-$(CONFIG_DRM_MEDIATEK_PANEL) += -I$(srctree)/drivers/leds/
+# N6 code for HQ-323818 by zhangyundan at 2023/09/02 start
+ifeq ($(KERNEL_FACTORY_BUILD),1)
+KBUILD_CFLAGS += -DKERNEL_FACTORY_BUILD=1
+endif
+# N6 code for HQ-323818 by zhangyundan at 2023/09/02 end

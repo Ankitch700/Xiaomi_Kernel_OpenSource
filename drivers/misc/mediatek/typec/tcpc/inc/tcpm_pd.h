@@ -1,6 +1,14 @@
-/* SPDX-License-Identifier: GPL-2.0 */
 /*
- * Copyright (c) 2020 MediaTek Inc.
+ * Copyright (C) 2020 Richtek Inc.
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License for more details.
  */
 
 #ifndef TCPM_PD_H_
@@ -23,7 +31,7 @@
 
 /******************* PD30 *******************/
 
-#if CONFIG_USB_PD_REV30_CHUNKING_BY_PE
+#ifdef CONFIG_USB_PD_REV30_CHUNKING_BY_PE
 #define MAX_EXTENDED_MSG_LEN	260
 #else
 #define MAX_EXTENDED_MSG_LEN	26
@@ -33,6 +41,7 @@
 
 #define PD_BSDO_SIZE	1
 #define PD_CCDO_SIZE	1
+#define PD_VERDO_SIZE   1
 #define PD_ADO_SIZE		1
 
 /*
@@ -127,7 +136,8 @@ enum pd_battery_reference {
 
 /* SCEDB, Source_Capabilities_Extended */
 
-#define PD_SCEDB_SIZE	24
+#define PD_SCEDB_SIZE	25
+#define PD_SINK_CAP_EXT_DATA_BYTE		24
 
 #define PD_SCEDB_VR(load_step, ioc)	\
 	((load_step) | (ioc << 2))
@@ -179,6 +189,28 @@ struct pd_source_cap_ext {
 	uint8_t	source_inputs;	/* bit field */
 	uint8_t	batteries;
 	uint8_t	source_pdp;
+	uint8_t	epr_source_pdp;
+};
+
+struct pd_snk_cap_ext {
+	uint16_t	vid;
+	uint16_t	pid;
+	uint32_t	xid;
+	uint8_t	fw_ver;
+	uint8_t	hw_ver;
+	uint8_t skedb_ver;
+	uint8_t load_step;
+	uint8_t snk_load_char;
+	uint8_t compliance;
+	uint8_t touch_temp;
+	uint8_t bat_info;
+	uint8_t snk_mode;
+	uint8_t snk_min_pdp;
+	uint8_t snk_oper_pdp;
+	uint8_t snk_max_pdp;
+	uint8_t epr_snk_min_pdp;
+	uint8_t epr_snk_oper_pdp;
+	uint8_t epr_snk_max_pdp;
 };
 
 /* GBSDB, Get_Battery_Status */
@@ -202,7 +234,7 @@ struct pd_get_battery_capabilities {
 #define PD_BCDB_SIZE		9
 
 #define PD_BCDB_BAT_CAP_NOT_PRESENT	0x0000
-#define PD_BCDB_BAT_CAP_UNKNOWN		0Xffff
+#define PD_BCDB_BAT_CAP_UNKNOWN		0xffff
 #define PD_BCDB_BAT_CAP_RAW(cap_wh)	(cap_wh*10)
 #define PD_BCDB_BAT_CAP_VAL(raw)	(raw/10)
 
@@ -266,6 +298,8 @@ struct pd_country_info {
 
 /* SDB, Status */
 
+#define PD_SDB_SIZE	7
+
 #define PD_STATUS_INPUT_EXT_POWER	(1<<1)
 #define PD_STATUS_INPUT_EXT_POWER_FROM_AC	(1<<2)
 #define PD_STATUS_INPUT_INT_POWER_BAT		(1<<3)
@@ -289,14 +323,12 @@ struct pd_country_info {
 struct pd_status {
 	uint8_t internal_temp;	/* 0 means no support */
 	uint8_t present_input;	/* bit filed */
-	uint8_t present_battery_input; /* bit filed */
+	uint8_t present_battery_input;
 	uint8_t event_flags;	/* bit filed */
 	uint8_t temp_status;	/* bit filed */
 	uint8_t power_status;	/* bit filed */
 	uint8_t power_state_change;
 };
-
-#define PD_SDB_SIZE	sizeof(struct pd_status)
 
 /* PPSSDB, PPSStatus */
 

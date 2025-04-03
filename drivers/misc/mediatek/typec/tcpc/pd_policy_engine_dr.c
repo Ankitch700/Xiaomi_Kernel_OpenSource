@@ -1,6 +1,16 @@
-// SPDX-License-Identifier: GPL-2.0
 /*
- * Copyright (c) 2020 MediaTek Inc.
+ * Copyright (C) 2020 Richtek Inc.
+ *
+ * Power Delivery Policy Engine for DR
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License for more details.
  */
 
 #include "inc/pd_core.h"
@@ -54,7 +64,7 @@ void pe_dr_snk_give_source_cap_entry(struct pd_port *pd_port)
 	pd_dpm_send_source_caps(pd_port);
 }
 
-#if CONFIG_USB_PD_REV30_SRC_CAP_EXT_LOCAL
+#ifdef CONFIG_USB_PD_REV30_SRC_CAP_EXT_LOCAL
 void pe_dr_snk_give_source_cap_ext_entry(struct pd_port *pd_port)
 {
 	PE_STATE_WAIT_TX_SUCCESS(pd_port);
@@ -63,7 +73,7 @@ void pe_dr_snk_give_source_cap_ext_entry(struct pd_port *pd_port)
 }
 #endif	/* CONFIG_USB_PD_REV30_SRC_CAP_EXT_LOCAL */
 
-#if CONFIG_USB_PD_REV30_SRC_CAP_EXT_REMOTE
+#ifdef CONFIG_USB_PD_REV30_SRC_CAP_EXT_REMOTE
 void pe_dr_src_get_source_cap_ext_entry(struct pd_port *pd_port)
 {
 	PE_STATE_WAIT_MSG(pd_port);

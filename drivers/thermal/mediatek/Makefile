@@ -23,3 +23,18 @@ obj-$(CONFIG_MTK_THERMAL_INTERFACE)	+= thermal_interface.o
 obj-$(CONFIG_MTK_THERMAL_JATM)	+= thermal_jatm.o
 
 obj-$(CONFIG_MTK_BOARD_THERMAL)	+= board_temp.o
+
+# N6 code for HQ-308650 by yingxuezhen at 2023/07/24 start
+obj-m += mi_thermal_message.o
+# N6 code for HQ-308650 by yingxuezhen at 2022/07/24 end
+
+# N6 code for HQ-309221 by yingxuezhen at 2023/07/26 start
+obj-m += hq_CPU_temp.o
+# N6 code for HQ-309221 by yingxuezhen at 2022/07/26 end
+
+# N6 code for HQ-309377 by hankang at 2023/07/26 start
+obj-m += hq_charge_temp.o
+# N6 code for HQ-309377 by hankang at 2022/07/26 end
+# N6 code for HQ-304647 by xiexinli at 2023/07/28 start
+obj-m += hq_fl_temp.o
+# N6 code for HQ-304647 by xiexinli at 2023/07/28 start

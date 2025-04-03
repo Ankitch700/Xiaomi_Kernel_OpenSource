@@ -1,6 +1,16 @@
-// SPDX-License-Identifier: GPL-2.0
 /*
- * Copyright (c) 2020 MediaTek Inc.
+ * Copyright (C) 2020 Richtek Inc.
+ *
+ * Power Delivery Process Event For PRS
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License for more details.
  */
 
 #include "inc/pd_core.h"
@@ -8,9 +18,7 @@
 #include "inc/pd_process_evt.h"
 #include "inc/pd_dpm_core.h"
 
-#if CONFIG_USB_PD_PR_SWAP
-
-#if CONFIG_USB_PD_PR_SWAP_ERROR_RECOVERY
+#ifdef CONFIG_USB_PD_PR_SWAP_ERROR_RECOVERY
 #define PE_PRS_SNK_HARD_RESET	PE_ERROR_RECOVERY
 #define PE_PRS_SRC_HARD_RESET	PE_ERROR_RECOVERY
 #else
@@ -61,7 +69,7 @@ DECL_PE_STATE_REACTION(PD_DPM_MSG_NAK);
 /* HW Event reactions */
 
 DECL_PE_STATE_TRANSITION(PD_HW_VBUS_PRESENT) = {
-#if CONFIG_USB_PD_VBUS_DETECTION_DURING_PR_SWAP
+#ifdef CONFIG_USB_PD_VBUS_DETECTION_DURING_PR_SWAP
 	{ PE_PRS_SRC_SNK_WAIT_SOURCE_ON, PE_SNK_STARTUP },
 #endif /* CONFIG_USB_PD_VBUS_DETECTION_DURING_PR_SWAP */
 };
@@ -75,14 +83,14 @@ DECL_PE_STATE_REACTION(PD_HW_TX_FAILED);
 
 DECL_PE_STATE_TRANSITION(PD_HW_VBUS_SAFE0V) = {
 	{ PE_PRS_SRC_SNK_TRANSITION_TO_OFF, PE_PRS_SRC_SNK_ASSERT_RD },
-#if CONFIG_USB_PD_VBUS_DETECTION_DURING_PR_SWAP
+#ifdef CONFIG_USB_PD_VBUS_DETECTION_DURING_PR_SWAP
 	{ PE_PRS_SNK_SRC_TRANSITION_TO_OFF, PE_PRS_SNK_SRC_ASSERT_RP },
 #endif /* CONFIG_USB_PD_VBUS_DETECTION_DURING_PR_SWAP */
 };
 DECL_PE_STATE_REACTION(PD_HW_VBUS_SAFE0V);
 
 /*
- * [BLOCK] Porcess PD Ctrl MSG
+ * [BLOCK] Process PD Ctrl MSG
  */
 
 static inline bool pd_process_ctrl_msg_good_crc(
@@ -103,7 +111,7 @@ static inline bool pd_process_ctrl_msg_ps_rdy(
 	struct pd_port *pd_port, struct pd_event *pd_event)
 {
 	switch (pd_port->pe_state_curr) {
-#if CONFIG_USB_PD_VBUS_DETECTION_DURING_PR_SWAP
+#ifdef CONFIG_USB_PD_VBUS_DETECTION_DURING_PR_SWAP
 	case PE_PRS_SRC_SNK_WAIT_SOURCE_ON:
 		pd_enable_vbus_valid_detection(pd_port, true);
 		return false;
@@ -137,7 +145,7 @@ static inline bool pd_process_ctrl_msg(
 }
 
 /*
- * [BLOCK] Porcess DPM MSG
+ * [BLOCK] Process DPM MSG
  */
 
 static inline bool pd_process_dpm_msg(
@@ -155,7 +163,7 @@ static inline bool pd_process_dpm_msg(
 }
 
 /*
- * [BLOCK] Porcess HW MSG
+ * [BLOCK] Process HW MSG
  */
 
 static inline bool pd_process_hw_msg(
@@ -169,7 +177,6 @@ static inline bool pd_process_hw_msg(
 		return PE_MAKE_STATE_TRANSIT(PD_HW_VBUS_PRESENT);
 
 	case PD_HW_TX_FAILED:
-	case PD_HW_TX_DISCARD:
 		return PE_MAKE_STATE_TRANSIT(PD_HW_TX_FAILED);
 
 	case PD_HW_VBUS_SAFE0V:
@@ -181,7 +188,7 @@ static inline bool pd_process_hw_msg(
 }
 
 /*
- * [BLOCK] Porcess Timer MSG
+ * [BLOCK] Process Timer MSG
  */
 
 static inline bool pd_process_timer_msg(
@@ -229,5 +236,3 @@ bool pd_process_event_prs(struct pd_port *pd_port, struct pd_event *pd_event)
 		return false;
 	}
 }
-#endif	/* CONFIG_USB_PD_PR_SWAP */
-

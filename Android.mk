@@ -7,6 +7,18 @@ ifeq ($(notdir $(LOCAL_PATH)),$(strip $(LINUX_KERNEL_VERSION)))
 
 include $(LOCAL_PATH)/kenv.mk
 
+
+#  =============N6R PROJECT===============
+$(warning MIUI_BUILD_SUPPORT_REGION = $(MIUI_BUILD_SUPPORT_REGION))
+ifneq (,$(filter $(MIUI_BUILD_SUPPORT_REGION), eea tr))
+EU_50W_FUNC := 1
+$(warning EU_50W_FUNC = $(EU_50W_FUNC))
+else
+EU_50W_FUNC := 0
+$(warning EU_50W_FUNC = $(EU_50W_FUNC))
+endif
+#  =============N6R PROJECT===============
+
 ifeq ($(wildcard $(TARGET_PREBUILT_KERNEL)),)
 KERNEL_MAKE_DEPENDENCIES := $(shell find $(KERNEL_DIR) -name .git -prune -o -type f | sort)
 KERNEL_MAKE_DEPENDENCIES += $(shell find vendor/mediatek/kernel_modules -name .git -prune -o -type f | sort)
@@ -26,7 +38,7 @@ $(TARGET_KERNEL_CONFIG): PRIVATE_CC_WRAPPER := $(CCACHE_EXEC)
 $(TARGET_KERNEL_CONFIG): PRIVATE_KERNEL_BUILD_CONFIG := $(REL_GEN_KERNEL_BUILD_CONFIG)
 $(TARGET_KERNEL_CONFIG): $(wildcard kernel/build/*.sh) $(GEN_KERNEL_BUILD_CONFIG) $(KERNEL_MAKE_DEPENDENCIES) | kernel-outputmakefile
 	$(hide) mkdir -p $(dir $@)
-	$(hide) cd kernel && ENABLE_GKI_CHECKER=$(ENABLE_GKI_CHECKER) CC_WRAPPER=$(PRIVATE_CC_WRAPPER) SKIP_MRPROPER=1 BUILD_CONFIG=$(PRIVATE_KERNEL_BUILD_CONFIG) OUT_DIR=$(PRIVATE_KERNEL_OUT) DIST_DIR=$(PRIVATE_DIST_DIR) POST_DEFCONFIG_CMDS="exit 0" ./build/build.sh && cd ..
+	$(hide) cd kernel && EU_50W_FUNC=$(EU_50W_FUNC) ENABLE_GKI_CHECKER=$(ENABLE_GKI_CHECKER) CC_WRAPPER=$(PRIVATE_CC_WRAPPER) SKIP_MRPROPER=1 BUILD_CONFIG=$(PRIVATE_KERNEL_BUILD_CONFIG) OUT_DIR=$(PRIVATE_KERNEL_OUT) DIST_DIR=$(PRIVATE_DIST_DIR) POST_DEFCONFIG_CMDS="exit 0" ./build/build.sh && cd ..
 
 ifeq (yes,$(strip $(BUILD_KERNEL)))
 .KATI_RESTAT: $(KERNEL_ZIMAGE_OUT)
@@ -46,7 +58,8 @@ $(KERNEL_ZIMAGE_OUT): PRIVATE_KERNEL_BUILD_SCRIPT := ./build/build.sh
 endif
 $(KERNEL_ZIMAGE_OUT): $(TARGET_KERNEL_CONFIG) $(KERNEL_MAKE_DEPENDENCIES)
 	$(hide) mkdir -p $(dir $@)
-	$(hide) cd kernel && CC_WRAPPER=$(PRIVATE_CC_WRAPPER) SKIP_MRPROPER=1 BUILD_CONFIG=$(PRIVATE_KERNEL_BUILD_CONFIG) OUT_DIR=$(PRIVATE_KERNEL_OUT) DIST_DIR=$(PRIVATE_DIST_DIR) SKIP_DEFCONFIG=1 $(PRIVATE_KERNEL_BUILD_SCRIPT) && cd ..
+	#  N6 code for HQ-304638 by hankang at 2023/7/15
+	$(hide) cd kernel && EU_50W_FUNC=$(EU_50W_FUNC) CC_WRAPPER=$(PRIVATE_CC_WRAPPER) SKIP_MRPROPER=1 BUILD_CONFIG=$(PRIVATE_KERNEL_BUILD_CONFIG) OUT_DIR=$(PRIVATE_KERNEL_OUT) DIST_DIR=$(PRIVATE_DIST_DIR) SKIP_DEFCONFIG=1 KERNEL_FACTORY_BUILD=$(FACTORY_BUILD) $(PRIVATE_KERNEL_BUILD_SCRIPT) && cd ..
 	$(hide) $(call fixup-kernel-cmd-file,$(KERNEL_OUT)/arch/$(KERNEL_TARGET_ARCH)/boot/compressed/.piggy.xzkern.cmd)
 	cat $(IMAGE_GZ_PATH) $(MTK_APPEND_DTB_PATH) > $(MTK_IMAGE_GZ_DTB_PATH)
 
@@ -88,7 +101,7 @@ clean-kernel:
 kernel-outputmakefile: PRIVATE_DIR := $(KERNEL_DIR)
 kernel-outputmakefile: PRIVATE_KERNEL_OUT := $(REL_KERNEL_OUT)/$(LINUX_KERNEL_VERSION)
 kernel-outputmakefile:
-	$(PREBUILT_MAKE_PREFIX)/$(MAKE) -C $(PRIVATE_DIR) O=$(PRIVATE_KERNEL_OUT) outputmakefile
+	$(PREBUILT_MAKE_PREFIX)/$(MAKE) -C $(PRIVATE_DIR) O=$(PRIVATE_KERNEL_OUT) EU_50W_FUNC=$(EU_50W_FUNC) outputmakefile
 
 ### DTB build template
 MTK_DTBIMAGE_DTS := $(addsuffix .dts,$(addprefix $(KERNEL_DIR)/arch/$(KERNEL_TARGET_ARCH)/boot/dts/,$(PLATFORM_DTB_NAME)))

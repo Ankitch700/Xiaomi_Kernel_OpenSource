@@ -160,6 +160,29 @@
 #define IMX582_SENSOR_ID                        0x0582
 #define IMX596_SENSOR_ID                        0x0596
 /*OV*/
+/*N6 code for HQ-306078 by zhaobeidou at 20230707 start*/
+#define OV16A1Q_OFILM_FRONT_SENSOR_ID           0x1641
+#define OV16A1Q_AAC_FRONT_SENSOR_ID                 0x1641+1
+#define GC16B3_OFILM_FRONT_SENSOR_ID                 0x16b3
+#define GC16B3_AAC_FRONT_SENSOR_ID                 0x16b3+1
+/*N6 code for HQ-306078 by zhaobeidou at 20230707 end*/
+
+/*N6 code for HQ-306079 by jinxiaoqin at 202307011 start*/
+#define  OV08D10_OFILM_ULTRA_SENSOR_ID           0x56084700
+#define  SENSOR_DRVNAME_OV08D10_OFILM_ULTRA_MIPI_RAW      "ov08d10_ofilm_ultra_mipi_raw"
+#define  OV08D10_AAC_ULTRA_SENSOR_ID           0x56084701
+#define  SENSOR_DRVNAME_OV08D10_AAC_ULTRA_MIPI_RAW      "ov08d10_aac_ultra_mipi_raw"
+/*N6 code for HQ-306079 by jinxiaoiqn at 20230711 end*/
+
+/*N6 code for  HQ-308044 by hudongjiao at 20230718 start*/
+#define OV64B40_SUNNY_MAIN_SENSOR_ID                 0x6442
+#define SENSOR_DRVNAME_OV64B40_SUNNY_MAIN_MIPI_RAW   "ov64b40_sunny_main_mipi_raw"
+/*N6 code for  HQ-308044 by hudongjiao at 20230718 end*/
+
+/*N6 code for HQ-306080 by p-wangjie103 at 2023/07/12 start*/
+#define OV02B10_TRULY_MACRO_SENSOR_ID           0x002B
+#define OV02B10_AAC_MACRO_SENSOR_ID           (0x002B + 1)
+/*N6 code for HQ-306080 by p-wangjie103 at 2023/07/12 end*/
 #define OV23850_SENSOR_ID                       0x023850
 #define OV16880_SENSOR_ID                       0x016880
 #define OV16825MIPI_SENSOR_ID                   0x016820
@@ -210,7 +233,6 @@
 #define OV2650_SENSOR_ID_3                      0x2655
 #define OV20880MIPI_SENSOR_ID                   0x20880
 #define OV05A20_SENSOR_ID                       0x5305
-
 /*S5K*/
 #define S5KJD1_SENSOR_ID                        0x3841
 #define S5K2LQSX_SENSOR_ID                      0x2c1a
@@ -257,6 +279,15 @@
 #define S5K5E9_SENSOR_ID                        0x559b
 #define S5KHM2SP_SENSOR_ID                      0x1AD2
 #define S5K4H7ALPHA_SENSOR_ID                   0x487B
+/*N6 code for HQ-306051 by huabinchen at 20230710 start*/
+#define S5KHP3_OFILM_MAIN_SENSOR_ID                  0x1B73
+/*N6 code for HQ-306051 by huabinchen at 20230710 end*/
+/*N6 code for HQ-306077 by HQ camera at 20230711 start*/
+#define S5KHPX_SUNNY_MAIN_SENSOR_ID             0x1B70
+/*N6 code for HQ-306077 by HQ camera at 20230711 end*/
+/*N6 code for HQ-336394 by wangjie at 20231010 start*/
+#define S5KHP3_SAMSUNG_MAIN_SENSOR_ID                  0x1B74
+/*N6 code for HQ-336394 by wangjie at 20231010 end*/
 /*HI*/
 #define HI841_SENSOR_ID                         0x0841
 #define HI707_SENSOR_ID                         0x00b8
@@ -378,6 +409,8 @@
 #define CAMERA_HW_DEVNAME                       "kd_camera_hw"
 /* SENSOR DEVICE DRIVER NAME */
 /*IMX*/
+
+
 #define SENSOR_DRVNAME_IMX499_MIPI_RAW          "imx499_mipi_raw"
 #define SENSOR_DRVNAME_IMX499_MIPI_RAW_13M      "imx499_mipi_raw_13m"
 #define SENSOR_DRVNAME_IMX481_MIPI_RAW          "imx481_mipi_raw"
@@ -424,6 +457,17 @@
 #define SENSOR_DRVNAME_IMX582_MIPI_RAW          "imx582_mipi_raw"
 #define SENSOR_DRVNAME_IMX596_MIPI_RAW          "imx596_mipi_raw"
 /*OV*/
+/*N6 code for HQ-306078 by zhaobeidou at 20230707 start*/
+#define SENSOR_DRVNAME_OV16A1Q_OFILM_FRONT_MIPI_RAW    "ov16a1q_ofilm_front_mipi_raw"
+#define SENSOR_DRVNAME_OV16A1Q_AAC_FRONT_MIPI_RAW    "ov16a1q_aac_front_mipi_raw"
+#define SENSOR_DRVNAME_GC16B3_OFILM_FRONT_MIPI_RAW    "gc16b3_ofilm_front_mipi_raw"
+#define SENSOR_DRVNAME_GC16B3_AAC_FRONT_MIPI_RAW    "gc16b3_aac_front_mipi_raw"
+/*N6 code for HQ-306078 by zhaobeidou at 20230707 end*/
+
+/*N6 code for HQ-306080 by p-wangjie103 at 2023/07/12 start*/
+#define SENSOR_DRVNAME_OV02B10_TRULY_MACRO_MIPI_RAW        "ov02b10_truly_macro_mipi_raw"
+#define SENSOR_DRVNAME_OV02B10_AAC_MACRO_MIPI_RAW        "ov02b10_aac_macro_mipi_raw"
+/*N6 code for HQ-306080 by p-wangjie103 at 2023/07/12 end*/
 #define SENSOR_DRVNAME_OV23850_MIPI_RAW         "ov23850_mipi_raw"
 #define SENSOR_DRVNAME_OV16880_MIPI_RAW         "ov16880_mipi_raw"
 #define SENSOR_DRVNAME_OV16885_MIPI_RAW         "ov16885_mipi_raw"
@@ -476,7 +520,6 @@
 #define SENSOR_DRVNAME_OV2650_RAW               "ov265x_raw"
 #define SENSOR_DRVNAME_OV20880_MIPI_RAW         "ov20880_mipi_raw"
 #define SENSOR_DRVNAME_OV05A20_MIPI_RAW         "ov05a20_mipi_raw"
-
 /*S5K*/
 #define SENSOR_DRVNAME_S5KJD1_MIPI_RAW        "s5kjd1_mipi_raw"
 #define SENSOR_DRVNAME_S5K2LQSX_MIPI_RAW        "s5k2lqsx_mipi_raw"
@@ -514,6 +557,15 @@
 #define SENSOR_DRVNAME_S5K5E9_MIPI_RAW          "s5k5e9_mipi_raw"
 #define SENSOR_DRVNAME_S5KHM2SP_MIPI_RAW        "s5khm2sp_mipi_raw"
 #define SENSOR_DRVNAME_S5K4H7ALPHA_MIPI_RAW     "s5k4h7alpha_mipi_raw"
+/*N6 code for HQ-306051 by huabinchen at 20230710 start*/
+#define SENSOR_DRVNAME_S5KHP3_OFILM_MAIN_MIPI_RAW    "s5khp3_ofilm_main_mipi_raw"
+/*N6 code for HQ-306051 by huabinchen at 20230710 end*/
+/*N6 code for HQ-306077 by HQ camera at 20230711 start*/
+#define SENSOR_DRVNAME_S5KHPX_SUNNY_MAIN_MIPI_RAW "s5khpx_sunny_main_mipi_raw"
+/*N6 code for HQ-306077 by HQ camera at 20230711 end*/
+/*N6 code for HQ-336394 by wangjie at 20231010 start*/
+#define SENSOR_DRVNAME_S5KHP3_SAMSUNG_MAIN_MIPI_RAW    "s5khp3_samsung_main_mipi_raw"
+/*N6 code for HQ-336394 by wangjie at 20231010 end*/
 /*HI*/
 #define SENSOR_DRVNAME_HI841_MIPI_RAW           "hi841_mipi_raw"
 #define SENSOR_DRVNAME_HI707_YUV                "hi707_yuv"

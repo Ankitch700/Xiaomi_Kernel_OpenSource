@@ -78,7 +78,15 @@ enum IMGSENSOR_HW_PIN_STATE {
 #define Vol_2800  IMGSENSOR_HW_PIN_STATE_LEVEL_2800
 #define Vol_2900  IMGSENSOR_HW_PIN_STATE_LEVEL_2900
 
-
+/* N6 code for HQ-309545 by huabinchen at 2023/07/05 start */
+//避免因新增档位影响到其他的驱动，所以不在IMGSENSOR_HW_PIN_STATE中新增，只定义宏的方式，供SMART LDO使用
+#define 	IMGSENSOR_HW_PIN_STATE_LEVEL_900   (IMGSENSOR_HW_PIN_STATE_LEVEL_HIGH + 1)
+#define Vol_900 IMGSENSOR_HW_PIN_STATE_LEVEL_900
+/*N6 code for HQ-306051 by huabinchen at 20230710 start*/
+#define 	IMGSENSOR_HW_PIN_STATE_LEVEL_2200   (IMGSENSOR_HW_PIN_STATE_LEVEL_900 + 1)
+#define Vol_2200 IMGSENSOR_HW_PIN_STATE_LEVEL_2200
+/*N6 code for HQ-306051 by huabinchen at 20230710 end*/
+/* N6 code for HQ-309545 by huabinchen at 2023/07/05 end */
 
 #define IMGSENSOR_I2C_DRV_NAME_0  "kd_camera_hw"
 #define IMGSENSOR_I2C_DRV_NAME_1  "kd_camera_hw_bus2"

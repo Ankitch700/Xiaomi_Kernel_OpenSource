@@ -28,8 +28,9 @@
 #include "mtk_disp_recovery.h"
 #include "mtk_drm_ddp_addon.h"
 #include "mtk_disp_pmqos.h"
-#include "slbc_ops.h"
-
+/* N6 code for HQ-317623 by zhangyundan at 2023/08/21 start */
+#include "../../../misc/mediatek/slbc/slbc_ops.h"
+/* N6 code for HQ-317623 by zhangyundan at 2023/08/21 end */
 #define MAX_CRTC 3
 #define OVL_LAYER_NR 12L
 #define OVL_PHY_LAYER_NR 4L
@@ -366,6 +367,11 @@ enum MTK_CRTC_PROP {
 	CRTC_PROP_MSYNC2_0_ENABLE,
 	CRTC_PROP_SKIP_CONFIG,
 	CRTC_PROP_OVL_DSI_SEQ,
+	CRTC_PROP_OUTPUT_SCENARIO,
+/* N6 code for HQ-331508 by zhangyundan at 2023/10/17 start */
+	/*MI FOD SYNC*/
+	CRTC_PROP_MI_FOD_SYNC_INFO,
+/* N6 code for HQ-331508 by zhangyundan at 2023/10/17 end*/
 	CRTC_PROP_MAX,
 };
 

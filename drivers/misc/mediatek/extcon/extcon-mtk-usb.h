@@ -16,7 +16,7 @@ struct mtk_extcon_info {
 	struct power_supply *usb_psy;
 	struct notifier_block psy_nb;
 	struct delayed_work wq_psy;
-#if IS_ENABLED(CONFIG_TCPC_CLASS)
+#if IS_ENABLED(CONFIG_TCPC_CLASS) || IS_ENABLED(CONFIG_HUAQIN_TCPC_CLASS)
 	struct tcpc_device *tcpc_dev;
 	struct notifier_block tcpc_nb;
 #endif

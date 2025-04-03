@@ -101,3 +101,9 @@ obj-$(CONFIG_MTK_GATE_IC) += gate_ic/
 obj-$(CONFIG_MTK_WIDEVINE_DRM) += widevine_drm/
 obj-$(CONFIG_INTERCONNECT_MTK_MMQOS_COMMON) += mmqos/
 obj-$(CONFIG_MTK_TIMER_ACCURACY_TEST) += timer/
+# N6 code for HQ-304286 by wangshuai at 2023/07/03 start
+obj-$(CONFIG_SIMTRAY_STATUS) += simtray/
+# N6 code for HQ-304286 by wangshuai at 2023/07/03 end
+# BSP.AUDIO - 2023.07.13 - modify to bring up UltraSound Sensor start
+obj-$(CONFIG_MTK_ULTRASND_PROXIMITY) += elliptic/
+# BSP.AUDIO - 2023.07.13 - modify to bring up UltraSound Sensor end

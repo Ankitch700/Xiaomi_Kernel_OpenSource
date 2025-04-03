@@ -35,6 +35,17 @@
 #define ESD_TRY_CNT 5
 #define ESD_CHECK_PERIOD 2000 /* ms */
 
+/*N6 code for HQ-304268 by zhengjie at 2023/8/23 start*/
+#ifdef CONFIG_MI_ESD_SUPPORT
+atomic_t lcm_valid_irq = ATOMIC_INIT(0);
+EXPORT_SYMBOL(lcm_valid_irq);
+atomic_t is_lcm_inited_esd = ATOMIC_INIT(0);
+EXPORT_SYMBOL(is_lcm_inited_esd);
+bool esd_flag = false;
+EXPORT_SYMBOL(esd_flag);
+#endif
+/*N6 code for HQ-304268 by zhengjie at 2023/8/23 end*/
+
 /* pinctrl implementation */
 long _set_state(struct drm_crtc *crtc, const char *name)
 {
@@ -271,10 +282,23 @@ done:
 static irqreturn_t _esd_check_ext_te_irq_handler(int irq, void *data)
 {
 	struct mtk_drm_esd_ctx *esd_ctx = (struct mtk_drm_esd_ctx *)data;
-
+/*N6 code for HQ-304268 by zhengjie at 2023/8/23 start*/
+#ifdef CONFIG_MI_ESD_SUPPORT
+	if(atomic_read(&is_lcm_inited_esd)) {
+		if(atomic_read(&lcm_valid_irq)) {
+			atomic_set(&lcm_valid_irq, 0);
+			DDPINFO("[ESD]%s   invalid irq, skip\n", __func__);
+		} else {
+			DDPINFO("[ESD]------is_lcm_inited_esd = %d,lcm_vaild_irq = %d\n", atomic_read(&is_lcm_inited_esd),atomic_read(&lcm_valid_irq));
+			atomic_set(&esd_ctx->ext_te_event, 1);
+			wake_up_interruptible(&esd_ctx->ext_te_wq);
+		}
+	}
+#else
 	atomic_set(&esd_ctx->ext_te_event, 1);
 	wake_up_interruptible(&esd_ctx->ext_te_wq);
-
+#endif
+/*N6 code for HQ-304268 by zhengjie at 2023/8/23 end*/
 	return IRQ_HANDLED;
 }
 
@@ -283,7 +307,14 @@ static int _mtk_esd_check_eint(struct drm_crtc *crtc)
 	struct mtk_drm_crtc *mtk_crtc = to_mtk_crtc(crtc);
 	struct mtk_drm_esd_ctx *esd_ctx = mtk_crtc->esd_ctx;
 	struct mtk_drm_private *priv = crtc->dev->dev_private;
+/*N6 code for HQ-304268 by zhengjie at 2023/8/23 start*/
+#ifdef CONFIG_MI_ESD_SUPPORT
+	int count = 0;
+	int ret = 0;
+#else
 	int ret = 1;
+#endif
+/*N6 code for HQ-304268 by zhengjie at 2023/8/23 end*/
 
 	DDPINFO("[ESD]ESD check eint\n");
 
@@ -299,12 +330,27 @@ static int _mtk_esd_check_eint(struct drm_crtc *crtc)
 	else
 		enable_irq(esd_ctx->eint_irq);
 
+/*N6 code for HQ-304268 by zhengjie at 2023/8/23 start*/
+#ifdef CONFIG_MI_ESD_SUPPORT
+        while (1) {
+                if (atomic_read(&esd_ctx->ext_te_event)) {
+                        ret = 1;
+                        break;
+                } else {
+                        count++;
+                }
+                if (count >= 5000 || kthread_should_stop())
+                        break;
+        }
+#else
 	/* check if there is TE in the last 2s, if so ESD check is pass */
 	if (wait_event_interruptible_timeout(
 		    esd_ctx->ext_te_wq,
 		    atomic_read(&esd_ctx->ext_te_event),
 		    HZ / 2) > 0)
 		ret = 0;
+#endif
+/*N6 code for HQ-304268 by zhengjie at 2023/8/23 end*/
 
 	if (mtk_drm_helper_get_opt(priv->helper_opt,
 			MTK_DRM_OPT_DUAL_TE) &&
@@ -353,9 +399,17 @@ static int mtk_drm_request_eint(struct drm_crtc *crtc)
 
 	of_property_read_u32_array(node, "debounce", ints, ARRAY_SIZE(ints));
 	esd_ctx->eint_irq = irq_of_parse_and_map(node, 0);
-
+/*N6 code for HQ-304268 by zhengjie at 2023/8/23 start*/
+#ifdef CONFIG_MI_ESD_SUPPORT
+	ret = request_irq(esd_ctx->eint_irq, _esd_check_ext_te_irq_handler,
+			  IRQF_TRIGGER_FALLING |IRQF_ONESHOT, "ESD_FLAG-eint", esd_ctx);
+	DDPINFO("%s-------ESD_FLAG-eint",__func__);
+#else
 	ret = request_irq(esd_ctx->eint_irq, _esd_check_ext_te_irq_handler,
 			  IRQF_TRIGGER_RISING, "ESD_TE-eint", esd_ctx);
+	DDPINFO("%s-------ESD_TE-eint",__func__);
+#endif
+/*N6 code for HQ-304268 by zhengjie at 2023/8/23 end*/
 	if (ret) {
 		DDPPR_ERR("eint irq line not available!\n");
 		return ret;
@@ -513,6 +567,11 @@ static int mtk_drm_esd_recover(struct drm_crtc *crtc)
 	cmdq_pkt_destroy(cmdq_handle);
 done:
 	CRTC_MMP_EVENT_END(drm_crtc_index(crtc), esd_recovery, 0, ret);
+/*N6 code for HQ-304268 by zhengjie at 2023/8/23 start*/
+#ifdef CONFIG_MI_ESD_SUPPORT
+	mtk_ddp_comp_io_cmd(output_comp, NULL, ESD_RESTORE_BACKLIGHT, NULL);
+#endif
+/*N6 code for HQ-304268 by zhengjie at 2023/8/23 end*/
 
 	return 0;
 }
@@ -619,10 +678,18 @@ static int mtk_drm_esd_check_worker_kthread(void *data)
 				if (!ret) /* success */
 					break;
 			}
-
+/*N6 code for HQ-304268 by zhengjie at 2023/8/23 start*/
+#ifdef CONFIG_MI_ESD_SUPPORT
+			esd_flag = true;
+			DDPPR_ERR(
+				"[ESD]esd check fail, will do esd recovery. try=%d esd_flag=%d\n",
+				i, esd_flag);
+#else
 			DDPPR_ERR(
 				"[ESD]esd check fail, will do esd recovery. te timeout:%d try=%d\n",
 				te_timeout, i);
+#endif
+/*N6 code for HQ-304268 by zhengjie at 2023/8/23 end*/
 			mtk_drm_esd_recover(crtc);
 			recovery_flg = 1;
 		} while (++i < ESD_TRY_CNT);
@@ -638,6 +705,11 @@ static int mtk_drm_esd_check_worker_kthread(void *data)
 		} else if (recovery_flg) {
 			DDPINFO("[ESD] esd recovery success\n");
 			recovery_flg = 0;
+/*N6 code for HQ-304268 by zhengjie at 2023/8/23 start*/
+#ifdef CONFIG_MI_ESD_SUPPORT
+			esd_flag = false;
+#endif
+/*N6 code for HQ-304268 by zhengjie at 2023/8/23 end*/
 		}
 		mtk_drm_trace_end();
 		DDP_MUTEX_UNLOCK(&mtk_crtc->lock, __func__, __LINE__);

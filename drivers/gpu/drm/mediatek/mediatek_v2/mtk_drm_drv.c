@@ -55,6 +55,13 @@
 #include "mtk_disp_chist.h"
 #include "platform/mtk_drm_6789.h"
 
+/*N6 code for HQ-304449 by p-zhoujiawei1 at 2023/07/05 start*/
+#ifdef CONFIG_MI_DISP
+#include "mi_disp/mi_disp_feature.h"
+#include "mi_disp/mi_disp_log.h"
+#endif
+
+/*N6 code for HQ-304449 by p-zhoujiawei1 at 2023/07/05 end*/
 #include "mtk_drm_mmp.h"
 /* *******Panel Master******** */
 #include "mtk_fbconfig_kdebug.h"
@@ -100,6 +107,12 @@ unsigned long long mutex_nested_time_end;
 long long mutex_nested_time_period;
 const char *mutex_nested_locker;
 static int aod_scp_flag;
+/*N6 code for HQ-304268 by zhengjie at 2023/8/23 start*/
+#ifdef CONFIG_MI_ESD_SUPPORT
+bool is_fts_fisrt_esd = false;
+EXPORT_SYMBOL(is_fts_fisrt_esd);
+#endif
+/*N6 code for HQ-304268 by zhengjie at 2023/8/23 end*/
 
 struct lcm_fps_ctx_t lcm_fps_ctx[MAX_CRTC];
 
@@ -1033,8 +1046,22 @@ static void drm_atomic_esd_chk_first_enable(struct drm_device *dev,
 	if (is_first) {
 		for_each_old_crtc_in_state(old_state, crtc, old_crtc_state, i) {
 			if (drm_crtc_index(crtc) == 0) {
-				if  (mtk_drm_lcm_is_connect())
+/*N6 code for HQ-304268 by zhengjie at 2023/8/23 start*/
+				if  (mtk_drm_lcm_is_connect()){
+#ifdef CONFIG_MI_ESD_SUPPORT
+					if(is_fts_fisrt_esd) {
+						atomic_set(&lcm_valid_irq,1);
+						DDPINFO("%s lcm_valid_irq = 1\n", __func__);
+					} else {
+						atomic_set(&lcm_valid_irq,0);
+						DDPINFO("%s lcm_valid_irq = 0\n", __func__);
+					}
+						atomic_set(&is_lcm_inited_esd,1);
+#endif
+/*N6 code for HQ-304268 by zhengjie at 2023/8/23 end*/
 					mtk_disp_esd_check_switch(crtc, true);
+				}
+
 				break;
 			}
 		}
@@ -3682,7 +3709,7 @@ int mtk_drm_get_display_caps_ioctl(struct drm_device *dev, void *data,
 	caps_info->lcm_degree = 180;
 #endif
 
-	caps_info->lcm_color_mode = MTK_DRM_COLOR_MODE_NATIVE;
+	caps_info->lcm_color_mode = MTK_DRM_COLOR_MODE_DISPLAY_P3;
 	if (mtk_drm_helper_get_opt(private->helper_opt, MTK_DRM_OPT_OVL_WCG)) {
 		if (params)
 			caps_info->lcm_color_mode = params->lcm_color_mode;
@@ -5910,6 +5937,11 @@ static int __init mtk_drm_init(void)
 	int i;
 
 	DDPINFO("%s+\n", __func__);
+/*N6 code for HQ-304449 by p-zhoujiawei1 at 2023/07/05 start*/
+#ifdef CONFIG_MI_DISP
+	mi_disp_feature_init();
+#endif
+/*N6 code for HQ-304449 by p-zhoujiawei1 at 2023/07/05 end*/
 	for (i = 0; i < ARRAY_SIZE(mtk_drm_drivers); i++) {
 		DDPINFO("%s register %s driver\n",
 			__func__, mtk_drm_drivers[i]->driver.name);

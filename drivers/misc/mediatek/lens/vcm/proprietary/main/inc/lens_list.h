@@ -359,4 +359,39 @@ extern long WV511AAF_Ioctl(struct file *a_pstFile, unsigned int a_u4Command,
 extern int WV511AAF_Release(struct inode *a_pstInode, struct file *a_pstFile);
 extern int WV511AAF_GetFileName(unsigned char *pFileName);
 
+/*N6 code for HQ-306051 by huabinchen at 20230711 start*/
+extern int EMERALD_GT9764VAF_SetI2Cclient(struct i2c_client *pstAF_I2Cclient,
+	spinlock_t *pAF_SpinLock, int *pAF_Opened);
+extern long EMERALD_GT9764VAF_Ioctl(struct file *a_pstFile, unsigned int a_u4Command,
+	unsigned long a_u4Param);
+extern int EMERALD_GT9764VAF_Release(struct inode *a_pstInode, struct file *a_pstFile);
+extern int EMERALD_GT9764VAF_GetFileName(unsigned char *pFileName);
+/*N6 code for HQ-306051 by huabinchen at 20230711 end*/
+/*N6 code for HQ-306077 by HQ camera at 20230712 start*/
+extern int EMERALD_DW9800VAF_SetI2Cclient(struct i2c_client *pstAF_I2Cclient,
+	spinlock_t *pAF_SpinLock, int *pAF_Opened);
+extern long EMERALD_DW9800VAF_Ioctl(struct file *a_pstFile, unsigned int a_u4Command,
+	unsigned long a_u4Param);
+extern int EMERALD_DW9800VAF_Release(struct inode *a_pstInode, struct file *a_pstFile);
+extern int EMERALD_DW9800VAF_GetFileName(unsigned char *pFileName);
+/*N6 code for HQ-306077 by HQ camera at 20230712 end*/
+
+/*N6 code for HQ-314256 by hudongjiao at 20230814 start*/
+extern int EMERALD_GT9764BAVAF_SetI2Cclient(struct i2c_client *pstAF_I2Cclient,
+	spinlock_t *pAF_SpinLock, int *pAF_Opened);
+extern long EMERALD_GT9764BAVAF_Ioctl(struct file *a_pstFile, unsigned int a_u4Command,
+	unsigned long a_u4Param);
+extern int EMERALD_GT9764BAVAF_Release(struct inode *a_pstInode, struct file *a_pstFile);
+extern int EMERALD_GT9764BAVAF_GetFileName(unsigned char *pFileName);
+/*N6 code for HQ-314256 by hudongjiao at 20230814 end*/
+
+/*N6 code for HQ-336394 by wangjie at 20231016 start*/
+extern int EMERALD_AK7314AF_SetI2Cclient(struct i2c_client *pstAF_I2Cclient,
+	spinlock_t *pAF_SpinLock, int *pAF_Opened);
+extern long EMERALD_AK7314AF_Ioctl(struct file *a_pstFile, unsigned int a_u4Command,
+	unsigned long a_u4Param);
+extern int EMERALD_AK7314AF_Release(struct inode *a_pstInode, struct file *a_pstFile);
+extern int EMERALD_AK7314AF_GetFileName(unsigned char *pFileName);
+/*N6 code for HQ-336394 by wangjie at 20231016 end*/
+
 #endif

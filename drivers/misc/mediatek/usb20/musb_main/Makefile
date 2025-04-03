@@ -28,6 +28,13 @@ ifeq ($(CONFIG_TCPC_CLASS),y)
 	ccflags-y += -I$(srctree)/drivers/misc/mediatek/typec/tcpc/inc
 endif
 # for ep0 test
+
+# N6 code for HQ-301669 by wumingzhu1 at 20230705 start */
+ifneq ($(filter $(CONFIG_HUAQIN_TCPC_CLASS),m y),)
+	ccflags-y += -I$(srctree)/drivers/misc/mediatek/typec/hq_tcpc/inc
+endif
+# N6 code for HQ-301669 by wumingzhu1 at 20230705 end */
+
 ccflags-y += -I$(srctree)/drivers/usb/core/
 ccflags-y += -I$(srctree)/drivers/misc/mediatek/usb20
 

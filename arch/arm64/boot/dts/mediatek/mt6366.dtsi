@@ -122,7 +122,9 @@
 		mt6366keys: mt6366keys {
 			compatible = "mediatek,mt6366-keys";
 			mediatek,long-press-mode = <1>;
-			power-off-time-sec = <0>;
+			/* N19A code for HQHW-5543 by p-gaobowei at 2023/12/18 start */
+			power-off-time-sec = <1>;
+			/* N19A code for HQHW-5543 by p-gaobowei at 2023/12/18 end */
 			power {
 				linux,keycodes = <116>;
 				wakeup-source;

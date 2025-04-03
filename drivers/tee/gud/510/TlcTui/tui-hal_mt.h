@@ -15,8 +15,10 @@ extern int secmem_api_alloc(u32 alignment, u32 size, u32 *refcount,
 	u32 *sec_handle, uint8_t *owner, uint32_t id);
 extern int secmem_api_unref(u32 sec_handle, uint8_t *owner, uint32_t id);
 
-extern int tpd_enter_tui(void);
-extern int tpd_exit_tui(void);
+/* N6 code for HQ-301702 by zhangyundan at 2023/07/10 start */
+/*extern int tpd_enter_tui(void);
+extern int tpd_exit_tui(void);*/
+/* N6 code for HQ-301702 by zhangyundan at 2023/07/10 end */
 extern int tui_region_offline(phys_addr_t *pa, unsigned long *size);
 extern int tui_region_offline64(phys_addr_t *pa, unsigned long *size);
 extern int tui_region_online(void);

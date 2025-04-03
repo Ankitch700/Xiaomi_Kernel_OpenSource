@@ -1,6 +1,14 @@
-/* SPDX-License-Identifier: GPL-2.0 */
 /*
- * Copyright (c) 2020 MediaTek Inc.
+ * Copyright (C) 2020 Richtek Inc.
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License for more details.
  */
 
 #ifndef PD_PROCESS_EVT_H_
@@ -38,7 +46,7 @@ struct pe_state_reaction {
 bool pd_process_protocol_error(
 	struct pd_port *pd_port, struct pd_event *pd_event);
 
-bool pd_process_tx_failed_discard(struct pd_port *pd_port, uint8_t msg);
+bool pd_process_tx_failed(struct pd_port *pd_port);
 
 /*---------------------------------------------------------------------------*/
 
@@ -190,7 +198,7 @@ extern bool pd_process_event_vcs(struct pd_port *pd_port, struct pd_event *evt);
 extern bool pd_process_event_com(struct pd_port *pd_port, struct pd_event *evt);
 extern bool pd_process_event_tcp(struct pd_port *pd_port, struct pd_event *evt);
 
-#if CONFIG_USB_PD_CUSTOM_DBGACC
+#ifdef CONFIG_USB_PD_CUSTOM_DBGACC
 extern bool pd_process_event_dbg(struct pd_port *pd_port, struct pd_event *evt);
 #endif	/* CONFIG_USB_PD_CUSTOM_DBGACC */
 

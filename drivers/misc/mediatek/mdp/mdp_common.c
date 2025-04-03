@@ -3706,7 +3706,7 @@ int cmdq_mdp_loop_reset_impl(const unsigned long resetReg,
 	CMDQ_REG_SET32(resetReg, resetWriteValue);
 	/* polling with 10ms timeout */
 	ret = readl_poll_timeout_atomic((void *)resetStateReg, poll_value,
-		(poll_value & resetMask) == resetPollingValue, 0, 10000);
+		(poll_value & resetMask) == resetPollingValue, 0, 50000);
 	/* return polling result */
 	if (ret == -ETIMEDOUT) {
 		CMDQ_ERR(

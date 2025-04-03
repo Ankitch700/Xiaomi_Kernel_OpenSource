@@ -21,7 +21,7 @@
 #include <linux/proc_fs.h>
 
 #include "extcon-mtk-usb.h"
-
+#include <linux/delay.h>
 #if IS_ENABLED(CONFIG_TCPC_CLASS)
 #include "tcpm.h"
 #endif
@@ -168,7 +168,14 @@ static int mtk_usb_extcon_psy_init(struct mtk_extcon_info *extcon)
 	int ret = 0;
 	struct device *dev = extcon->dev;
 
-	extcon->usb_psy = devm_power_supply_get_by_phandle(dev, "charger");
+	/* N6 code for HQ-301669 by wumingzhu1 at 20230705 start */
+	extcon->usb_psy = devm_power_supply_get_by_phandle(dev, "usb");
+	if (IS_ERR_OR_NULL(extcon->usb_psy)) {
+		extcon->usb_psy = power_supply_get_by_name("usb");
+		dev_err(dev,"get usb_psy by_phandle failed, try by name\n");
+	}
+	/* N6 code for HQ-301669 by wumingzhu1 at 20230705 end */
+
 	if (IS_ERR_OR_NULL(extcon->usb_psy)) {
 		dev_err(dev, "fail to get usb_psy\n");
 		return -EINVAL;
@@ -244,6 +251,7 @@ static int mtk_extcon_tcpc_notifier(struct notifier_block *nb,
 			container_of(nb, struct mtk_extcon_info, tcpc_nb);
 	struct device *dev = extcon->dev;
 	bool vbus_on;
+	static int count;
 
 	switch (event) {
 	case TCP_NOTIFY_SOURCE_VBUS:
@@ -281,16 +289,28 @@ static int mtk_extcon_tcpc_notifier(struct notifier_block *nb,
 	case TCP_NOTIFY_DR_SWAP:
 		dev_info(dev, "%s dr_swap, new role=%d\n",
 				__func__, noti->swap_state.new_role);
+DelayforSwap:
 		if (noti->swap_state.new_role == PD_ROLE_UFP &&
 				extcon->c_role == USB_ROLE_HOST) {
 			dev_info(dev, "switch role to device\n");
 			mtk_usb_extcon_set_role(extcon, USB_ROLE_NONE);
 			mtk_usb_extcon_set_role(extcon, USB_ROLE_DEVICE);
+			count = 0;
 		} else if (noti->swap_state.new_role == PD_ROLE_DFP &&
 				extcon->c_role == USB_ROLE_DEVICE) {
 			dev_info(dev, "switch role to host\n");
 			mtk_usb_extcon_set_role(extcon, USB_ROLE_NONE);
 			mtk_usb_extcon_set_role(extcon, USB_ROLE_HOST);
+			count = 0;
+		} else {
+            		count++;
+			if (count > 3) {
+				count = 0;
+				break;
+			}
+			dev_info(dev, "Delay for DelayforSwap... count = %d \n", count);
+			msleep(500);
+			goto DelayforSwap;
 		}
 		break;
 	}
@@ -553,6 +573,8 @@ static int mtk_usb_extcon_probe(struct platform_device *pdev)
 	if (ret < 0)
 		dev_err(dev, "failed to init tcpc\n");
 #endif
+
+	dev_info(dev, "%s probe success!\n", __func__);
 
 	platform_set_drvdata(pdev, extcon);
 

@@ -19,23 +19,19 @@
 #include "ccci_modem.h"
 #include "ccci_swtp.h"
 #include "ccci_fsm.h"
-
+/* N6 code for HQ- 302160 by p-gaobowei at 2023/07/03 start */
+#include <linux/proc_fs.h>
+#include <linux/input/mt.h>
+#include <linux/input.h>
+/* N6 code for HQ- 302160 by p-gaobowei at 2023/07/03 end */
 /* must keep ARRAY_SIZE(swtp_of_match) = ARRAY_SIZE(irq_name) */
 const struct of_device_id swtp_of_match[] = {
 	{ .compatible = SWTP_COMPATIBLE_DEVICE_ID, },
-	{ .compatible = SWTP1_COMPATIBLE_DEVICE_ID,},
-	{ .compatible = SWTP2_COMPATIBLE_DEVICE_ID,},
-	{ .compatible = SWTP3_COMPATIBLE_DEVICE_ID,},
-	{ .compatible = SWTP4_COMPATIBLE_DEVICE_ID,},
 	{},
 };
 
 static const char irq_name[][16] = {
 	"swtp0-eint",
-	"swtp1-eint",
-	"swtp2-eint",
-	"swtp3-eint",
-	"swtp4-eint",
 	"",
 };
 
@@ -43,6 +39,28 @@ static const char irq_name[][16] = {
 struct swtp_t swtp_data[SWTP_MAX_SUPPORT_MD];
 static const char rf_name[] = "RF_cable";
 #define MAX_RETRY_CNT 30
+
+/* N6 code for HQ- 302160 by p-gaobowei at 2023/07/03 start */
+static struct input_dev *swtp_input_dev;
+#define SWTP_GPIO_STATUS "gpio_status"
+int get_swtp_state = -1;
+int get_swtp_gpio = -1;
+static struct proc_dir_entry  *swtp_gpio_status;
+static int swtp_gpio_proc_show(struct seq_file *file, void *data)
+{
+	get_swtp_state = gpio_get_value(get_swtp_gpio);
+	seq_printf(file, "%d\n", get_swtp_state);
+	return 0;
+}
+static int swtp_gpio_proc_open (struct inode *inode, struct file *file)
+{
+	return single_open(file, swtp_gpio_proc_show, inode->i_private);
+}
+static const struct proc_ops swtp_gpio_status_ops = {
+	.proc_open = swtp_gpio_proc_open,
+	.proc_read = seq_read,
+};
+/* N6 code for HQ- 302160 by p-gaobowei at 2023/07/03 end */
 
 static int swtp_send_tx_power(struct swtp_t *swtp)
 {
@@ -94,9 +112,27 @@ static int swtp_switch_state(int irq, struct swtp_t *swtp)
 	if (swtp->eint_type[i] == IRQ_TYPE_LEVEL_LOW) {
 		irq_set_irq_type(swtp->irq[i], IRQ_TYPE_LEVEL_HIGH);
 		swtp->eint_type[i] = IRQ_TYPE_LEVEL_HIGH;
+		/* N6 code for HQ- 302160 by p-gaobowei at 2023/07/03 start */
+		if(swtp_input_dev != NULL){
+			input_report_key(swtp_input_dev, KEY_TABLE0, 1);
+			input_sync(swtp_input_dev);
+			input_report_key(swtp_input_dev, KEY_TABLE0, 0);
+			input_sync(swtp_input_dev);
+			CCCI_NORMAL_LOG(-1, SYS, 
+				"%s,input keycode = %d\n", __func__,KEY_TABLE0);
+		}
 	} else {
 		irq_set_irq_type(swtp->irq[i], IRQ_TYPE_LEVEL_LOW);
 		swtp->eint_type[i] = IRQ_TYPE_LEVEL_LOW;
+		if(swtp_input_dev != NULL){
+			input_report_key(swtp_input_dev, KEY_TABLE1, 1);
+			input_sync(swtp_input_dev);
+			input_report_key(swtp_input_dev, KEY_TABLE1, 0);
+			input_sync(swtp_input_dev);
+			CCCI_NORMAL_LOG(-1, SYS, 
+				"%s,input keycode = %d\n", __func__,KEY_TABLE1);
+		}
+		/* N6 code for HQ-302160 by p-gaobowei at 2023/07/03 end */
 	}
 
 	if (swtp->gpio_state[i] == SWTP_EINT_PIN_PLUG_IN)
@@ -263,8 +299,34 @@ static void swtp_init_delayed_work(struct work_struct *work)
 			swtp_data[md_id].eint_type[i] = ints1[1];
 			swtp_data[md_id].irq[i] = irq_of_parse_and_map(node, 0);
 
+			/* N6 code for HQ- 302160 by p-gaobowei at 2023/07/03 start */
+			get_swtp_gpio = of_get_named_gpio(node, "swtp-gpio", 0);
+			ret =  gpio_request(get_swtp_gpio, "swtp-gpio");
+			if (ret != 0) {
+				CCCI_NORMAL_LOG(-1, SYS, 
+					"%s,gpio_request fail,get_swtp_gpio=%d,ret=%d", __func__, get_swtp_gpio, ret);
+			}
+			swtp_gpio_status = proc_create(SWTP_GPIO_STATUS, 0644, NULL, &swtp_gpio_status_ops);
+			if (swtp_gpio_status == NULL) {
+				CCCI_NORMAL_LOG(-1, SYS, 
+					"%s,proc_create failed\n", __func__);
+			}
+			swtp_input_dev = input_allocate_device();
+			swtp_input_dev->name = "swtp";
+			__set_bit(EV_KEY, swtp_input_dev->evbit);
+			input_set_capability(swtp_input_dev, EV_KEY, KEY_TABLE0);
+			input_set_capability(swtp_input_dev, EV_KEY, KEY_TABLE1);
+			ret = input_register_device(swtp_input_dev);
+			if (ret != 0) {
+				CCCI_NORMAL_LOG(-1, SYS, 
+					"%s,input device register fail\n", __func__);
+			}
+			/* N6 code for HQ- 302160 by p-gaobowei at 2023/07/03 end */
+
 			ret = request_irq(swtp_data[md_id].irq[i],
-				swtp_irq_handler, IRQF_TRIGGER_NONE,
+				/* N6 code for HQ- 302160 by p-gaobowei at 2023/07/03 start */
+				swtp_irq_handler, IRQF_TRIGGER_LOW,
+				/* N6 code for HQ- 302160 by p-gaobowei at 2023/07/03 end */
 				irq_name[i], &swtp_data[md_id]);
 			if (ret) {
 				CCCI_LEGACY_ERR_LOG(md_id, SYS,

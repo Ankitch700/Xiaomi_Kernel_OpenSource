@@ -15,14 +15,16 @@
 #if IS_ENABLED(CONFIG_USB_POWER_DELIVERY)
 #include "pd_dpm_prv.h"
 #include "inc/tcpm.h"
-#if CONFIG_RECV_BAT_ABSENT_NOTIFY && CONFIG_MTK_BATTERY
+/* N6R code for HQ-429228 at 2024/10/31 by p-mazhuang3 start */
+#if (defined CONFIG_RECV_BAT_ABSENT_NOTIFY) && (defined CONFIG_MTK_BATTERY)
+/* N6R code for HQ-429228 at 2024/10/31 by p-mazhuang3 end */
 #include "mtk_battery.h"
 #endif /* CONFIG_RECV_BAT_ABSENT_NOTIFY && CONFIG_MTK_BATTERY */
 #endif /* CONFIG_USB_POWER_DELIVERY */
 
 #if IS_ENABLED(CONFIG_USB_POWER_DELIVERY)
-#if CONFIG_TCPC_NOTIFIER_LATE_SYNC
-#if CONFIG_RECV_BAT_ABSENT_NOTIFY && CONFIG_MTK_BATTERY
+#ifdef CONFIG_TCPC_NOTIFIER_LATE_SYNC
+#if (defined CONFIG_RECV_BAT_ABSENT_NOTIFY) && (defined CONFIG_MTK_BATTERY)
 static int fg_bat_notifier_call(struct notifier_block *nb,
 				unsigned long event, void *data)
 {
@@ -43,23 +45,23 @@ static int fg_bat_notifier_call(struct notifier_block *nb,
 #endif /* CONFIG_TCPC_NOTIFIER_LATE_SYNC */
 #endif /* CONFIG_USB_POWER_DELIVERY */
 
-#if CONFIG_TCPC_NOTIFIER_LATE_SYNC
+#ifdef CONFIG_TCPC_NOTIFIER_LATE_SYNC
 static int __tcpc_class_complete_work(struct device *dev, void *data)
 {
 	struct tcpc_device *tcpc = dev_get_drvdata(dev);
 #if IS_ENABLED(CONFIG_USB_POWER_DELIVERY)
-#if CONFIG_RECV_BAT_ABSENT_NOTIFY && CONFIG_MTK_BATTERY
+#if (defined CONFIG_RECV_BAT_ABSENT_NOTIFY) && (defined CONFIG_MTK_BATTERY)
 	struct notifier_block *fg_bat_nb = &tcpc->pd_port.fg_bat_nb;
 	int ret = 0;
 #endif /* CONFIG_RECV_BAT_ABSENT_NOTIFY && CONFIG_MTK_BATTERY */
 #endif /* CONFIG_USB_POWER_DELIVERY */
-
+	pr_info("__tcpc_class_complete_work\n");
 	if (tcpc != NULL) {
 		pr_info("%s = %s\n", __func__, dev_name(dev));
 		tcpc_device_irq_enable(tcpc);
 
 #if IS_ENABLED(CONFIG_USB_POWER_DELIVERY)
-#if CONFIG_RECV_BAT_ABSENT_NOTIFY && CONFIG_MTK_BATTERY
+#if (defined CONFIG_RECV_BAT_ABSENT_NOTIFY) && (defined CONFIG_MTK_BATTERY)
 		fg_bat_nb->notifier_call = fg_bat_notifier_call;
 		ret = register_battery_notifier(fg_bat_nb);
 		if (ret < 0) {
@@ -73,7 +75,8 @@ static int __tcpc_class_complete_work(struct device *dev, void *data)
 }
 
 static int __init tcpc_class_complete_init(void)
-{
+{	
+	pr_info("tcpc_class_complete_init\n");
 	if (!IS_ERR(tcpc_class)) {
 		class_for_each_device(tcpc_class, NULL, NULL,
 			__tcpc_class_complete_work);

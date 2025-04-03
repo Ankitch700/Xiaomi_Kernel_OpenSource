@@ -24,10 +24,25 @@
 #include "mtk-cmdq-ext.h"
 #endif
 
+/*N6 code for HQ-304449 by p-zhoujiawei1 at 2023/07/05 start*/
+#ifdef CONFIG_MI_DISP
+#include <uapi/drm/mi_disp.h>
+#include "mi_disp/mi_disp_feature.h"
+#include "mi_disp/mi_dsi_panel.h"
+#include "mi_disp/mi_dsi_display.h"
+#include "mi_disp/mi_panel_ext.h"
+#include "mi_disp/mi_disp_input_handler.h"
+#include "mi_disp/mi_disp_lhbm.h"
+#include "mi_disp/mi_disp_print.h"
+#endif
+
+#ifndef CONFIG_MI_DISP
 struct t_condition_wq {
 	wait_queue_head_t wq;
 	atomic_t condition;
 };
+#endif
+/*N6 code for HQ-304449 by p-zhoujiawei1 at 2023/07/05 end*/
 
 struct mtk_dsi_driver_data {
 	const u32 reg_cmdq0_ofs;
@@ -39,6 +54,11 @@ struct mtk_dsi_driver_data {
 	const u32 reg_vm_cmd_data30_ofs;
 	s32 (*poll_for_idle)(struct mtk_dsi *dsi, struct cmdq_pkt *handle);
 	irqreturn_t (*irq_handler)(int irq, void *dev_id);
+/*N6 code for HQ-304268 by zhengjie at 2023/8/23 start*/
+#ifdef CONFIG_MI_ESD_SUPPORT
+	char *mi_esd_eint_compat;
+#endif
+/*N6 code for HQ-304268 by zhengjie at 2023/8/23 end*/
 	char *esd_eint_compat;
 	bool support_shadow;
 	bool need_bypass_shadow;
@@ -51,6 +71,8 @@ struct mtk_dsi_driver_data {
 		struct mtk_drm_crtc *mtk_crtc, unsigned int en);
 };
 
+/*N6 code for HQ-304449 by p-zhoujiawei1 at 2023/07/05 start*/
+#ifndef CONFIG_MI_DISP
 struct mtk_dsi {
 	struct mtk_ddp_comp ddp_comp;
 	struct device *dev;
@@ -117,6 +139,8 @@ struct mtk_dsi {
 	/* for Panel Master dcs read/write */
 	struct mipi_dsi_device *dev_for_PM;
 };
+#endif
+/*N6 code for HQ-304449 by p-zhoujiawei1 at 2023/07/05 end*/
 
 s32 mtk_dsi_poll_for_idle(struct mtk_dsi *dsi, struct cmdq_pkt *handle);
 irqreturn_t mtk_dsi_irq_status(int irq, void *dev_id);

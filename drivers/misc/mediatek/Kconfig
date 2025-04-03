@@ -144,7 +144,13 @@ source "drivers/misc/mediatek/usb20/Kconfig"
 source "drivers/misc/mediatek/irtx/Kconfig"
 source "drivers/misc/mediatek/pwm/Kconfig"
 source "drivers/misc/mediatek/sensor/Kconfig"
+# BSP.AUDIO - 2023.07.13 - modify to bring up UltraSound Sensor start
+source "drivers/misc/mediatek/elliptic/Kconfig"
+# BSP.AUDIO - 2023.07.13 - modify to bring up UltraSound Sensor end
 source "drivers/misc/mediatek/gate_ic/Kconfig"
+# N6 code for HQ-304286 by wangshuai at 2023/07/03 start
+source "drivers/misc/mediatek/simtray/Kconfig"
+# N6 code for HQ-304286 by wangshuai at 2023/07/03 end
 endmenu # Other Peripheral
 
 menu "Performance"

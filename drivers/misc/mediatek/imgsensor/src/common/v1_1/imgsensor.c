@@ -55,6 +55,10 @@
 #include "imgsensor_ca.h"
 #endif
 
+/* N6 code for HQ-309545 by huabinchen at 2023/07/05 start */
+#include "camera_hw/smartldo/smartldo.h"
+/* N6 code for HQ-309545 by huabinchen at 2023/07/05 end */
+
 #include "seninf_drv.h"
 
 static DEFINE_MUTEX(gimgsensor_mutex);
@@ -555,6 +559,9 @@ static inline int imgsensor_check_is_alive(struct IMGSENSOR_SENSOR *psensor)
 	imgsensor_hw_power(&pimgsensor->hw,
 			psensor,
 			IMGSENSOR_HW_POWER_STATUS_OFF);
+/* N6 code for HQ-309545 by huabinchen at 2023/07/05 start */
+	mdelay(5);
+/* N6 code for HQ-309545 by huabinchen at 2023/07/05 end */
 	IMGSENSOR_PROFILE(&psensor_inst->profile_time, "CheckIsAlive");
 
 	return err ? -EIO : err;
@@ -2394,7 +2401,6 @@ static int imgsensor_probe(struct platform_device *pplatform_device)
 		unregister_chrdev_region(pimgsensor->dev_no, 1);
 		return -EAGAIN;
 	}
-
 	pimgsensor->pclass = class_create(THIS_MODULE, "sensordrv");
 	if (IS_ERR(pimgsensor->pclass)) {
 		int ret = PTR_ERR(pimgsensor->pclass);
@@ -2413,7 +2419,9 @@ static int imgsensor_probe(struct platform_device *pplatform_device)
 	}
 
 	phw->common.pplatform_device = pplatform_device;
-
+/* N6 code for HQ-309545 by huabinchen at 2023/07/05 start */
+	smartldo_i2c_create();
+/* N6 code for HQ-309545 by huabinchen at 2023/07/05 end */
 	imgsensor_hw_init(phw);
 	imgsensor_i2c_create();
 	imgsensor_proc_init();
@@ -2429,7 +2437,9 @@ static int imgsensor_probe(struct platform_device *pplatform_device)
 static int imgsensor_remove(struct platform_device *pplatform_device)
 {
 	struct IMGSENSOR *pimgsensor = &gimgsensor;
-
+/* N6 code for HQ-309545 by huabinchen at 2023/07/05 start */
+	smartldo_i2c_delete();
+/* N6 code for HQ-309545 by huabinchen at 2023/07/05 end */
 	imgsensor_i2c_delete();
 
 	/* Release char driver */

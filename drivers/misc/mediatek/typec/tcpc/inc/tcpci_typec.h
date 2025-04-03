@@ -1,6 +1,14 @@
-/* SPDX-License-Identifier: GPL-2.0 */
 /*
- * Copyright (c) 2020 MediaTek Inc.
+ * Copyright (C) 2020 Richtek Inc.
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License version 2 as
+ * published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License for more details.
  */
 
 #ifndef __LINUX_TCPCI_TYPEC_H
@@ -8,6 +16,7 @@
 #include "tcpci.h"
 
 struct tcpc_device;
+/* N19A code for HQHW-6756 by wuwencheng at 20240712 start */
 extern struct class *tcpc_class;
 extern bool tcpc_typec_is_act_as_sink_role(struct tcpc_device *tcpc);
 
@@ -21,7 +30,7 @@ extern bool tcpc_typec_is_act_as_sink_role(struct tcpc_device *tcpc);
 
 extern int tcpc_typec_enter_lpm_again(struct tcpc_device *tcpc);
 extern int tcpc_typec_handle_cc_change(struct tcpc_device *tcpc);
-
+extern int tcpc_device_irq_enable(struct tcpc_device *tcpc);
 extern int tcpc_typec_handle_ps_change(
 		struct tcpc_device *tcpc, int vbus_level);
 
@@ -30,7 +39,7 @@ extern int tcpc_typec_handle_timeout(
 
 extern int tcpc_typec_handle_vsafe0v(struct tcpc_device *tcpc);
 
-extern int tcpc_typec_set_rp_level(struct tcpc_device *tcpc, uint8_t res);
+extern int tcpc_typec_set_rp_level(struct tcpc_device *tcpc, uint8_t rp_lvl);
 
 extern int tcpc_typec_error_recovery(struct tcpc_device *tcpc);
 
@@ -44,21 +53,15 @@ extern int tcpc_typec_change_role(
 extern int tcpc_typec_handle_pe_pr_swap(struct tcpc_device *tcpc);
 #endif /* CONFIG_USB_POWER_DELIVERY */
 
-#if CONFIG_TYPEC_CAP_ROLE_SWAP
+#ifdef CONFIG_TYPEC_CAP_ROLE_SWAP
 extern int tcpc_typec_swap_role(struct tcpc_device *tcpc);
 #endif /* CONFIG_TYPEC_CAP_ROLE_SWAP */
 
-#if CONFIG_WATER_DETECTION
+#ifdef CONFIG_WATER_DETECTION
 extern int tcpc_typec_handle_wd(struct tcpc_device *tcpc, bool wd);
 #endif /* CONFIG_WATER_DETECTION */
 
-extern int tcpc_typec_handle_fod(struct tcpc_device *tcpc_dev,
-					enum tcpc_fod_status);
-extern bool tcpc_typec_ignore_fod(struct tcpc_device *tcpc_dev);
-
-extern int tcpc_typec_handle_otp(struct tcpc_device *tcpc_dev, bool otp);
-
-#if CONFIG_CABLE_TYPE_DETECTION
+#ifdef CONFIG_CABLE_TYPE_DETECTION
 extern int tcpc_typec_handle_ctd(struct tcpc_device *tcpc,
 				 enum tcpc_cable_type cable_type);
 #endif /* CONFIG_CABLE_TYPEC_DETECTION */
@@ -70,5 +73,4 @@ extern int tcpc_typec_handle_ctd(struct tcpc_device *tcpc,
 #define typec_get_cc_res()	\
 	(tcpc->typec_polarity ? typec_get_cc2() : typec_get_cc1())
 
-extern bool tcpc_typec_is_cc_attach(struct tcpc_device *tcpc_dev);
 #endif /* #ifndef __LINUX_TCPCI_TYPEC_H */
