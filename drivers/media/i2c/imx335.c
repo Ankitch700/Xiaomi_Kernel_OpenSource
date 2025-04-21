@@ -971,8 +971,8 @@ static int imx335_init_controls(struct imx335 *imx335)
 	imx335->hblank_ctrl = v4l2_ctrl_new_std(ctrl_hdlr,
 						&imx335_ctrl_ops,
 						V4L2_CID_HBLANK,
-						IMX335_REG_MIN,
-						IMX335_REG_MAX,
+						mode->hblank,
+						mode->hblank,
 						1, mode->hblank);
 	if (imx335->hblank_ctrl)
 		imx335->hblank_ctrl->flags |= V4L2_CTRL_FLAG_READ_ONLY;
@@ -1083,7 +1083,7 @@ error_mutex_destroy:
  *
  * Return: 0 if successful, error code otherwise.
  */
-static int imx335_remove(struct i2c_client *client)
+static void imx335_remove(struct i2c_client *client)
 {
 	struct v4l2_subdev *sd = i2c_get_clientdata(client);
 	struct imx335 *imx335 = to_imx335(sd);
@@ -1098,8 +1098,6 @@ static int imx335_remove(struct i2c_client *client)
 	pm_runtime_set_suspended(&client->dev);
 
 	mutex_destroy(&imx335->mutex);
-
-	return 0;
 }
 
 static const struct dev_pm_ops imx335_pm_ops = {
@@ -1114,7 +1112,7 @@ static const struct of_device_id imx335_of_match[] = {
 MODULE_DEVICE_TABLE(of, imx335_of_match);
 
 static struct i2c_driver imx335_driver = {
-	.probe_new = imx335_probe,
+	.probe = imx335_probe,
 	.remove = imx335_remove,
 	.driver = {
 		.name = "imx335",

@@ -7,8 +7,10 @@
 #include <linux/kref.h>
 #include <linux/list.h>
 #include <linux/cdev.h>
+#include <linux/uaccess.h>
 #include <linux/termios.h>
 #include <linux/seq_file.h>
+#include <linux/android_kabi.h>
 
 struct tty_struct;
 struct tty_driver;
@@ -71,8 +73,8 @@ struct serial_struct;
  *	is closed for the last time freeing up the resources. This is
  *	actually the second part of shutdown for routines that might sleep.
  *
- * @write: ``int ()(struct tty_struct *tty, const unsigned char *buf,
- *		    int count)``
+ * @write: ``ssize_t ()(struct tty_struct *tty, const unsigned char *buf,
+ *		    size_t count)``
  *
  *	This routine is called by the kernel to write a series (@count) of
  *	characters (@buf) to the @tty device. The characters may come from
@@ -141,7 +143,7 @@ struct serial_struct;
  *
  *	Optional.
  *
- * @set_termios: ``void ()(struct tty_struct *tty, struct ktermios *old)``
+ * @set_termios: ``void ()(struct tty_struct *tty, const struct ktermios *old)``
  *
  *	This routine allows the @tty driver to be notified when device's
  *	termios settings have changed. New settings are in @tty->termios.
@@ -355,9 +357,8 @@ struct tty_operations {
 	void (*close)(struct tty_struct * tty, struct file * filp);
 	void (*shutdown)(struct tty_struct *tty);
 	void (*cleanup)(struct tty_struct *tty);
-	int  (*write)(struct tty_struct * tty,
-		      const unsigned char *buf, int count);
-	int  (*put_char)(struct tty_struct *tty, unsigned char ch);
+	ssize_t (*write)(struct tty_struct *tty, const u8 *buf, size_t count);
+	int  (*put_char)(struct tty_struct *tty, u8 ch);
 	void (*flush_chars)(struct tty_struct *tty);
 	unsigned int (*write_room)(struct tty_struct *tty);
 	unsigned int (*chars_in_buffer)(struct tty_struct *tty);
@@ -365,7 +366,7 @@ struct tty_operations {
 		    unsigned int cmd, unsigned long arg);
 	long (*compat_ioctl)(struct tty_struct *tty,
 			     unsigned int cmd, unsigned long arg);
-	void (*set_termios)(struct tty_struct *tty, struct ktermios * old);
+	void (*set_termios)(struct tty_struct *tty, const struct ktermios *old);
 	void (*throttle)(struct tty_struct * tty);
 	void (*unthrottle)(struct tty_struct * tty);
 	void (*stop)(struct tty_struct *tty);
@@ -391,12 +392,14 @@ struct tty_operations {
 	void (*poll_put_char)(struct tty_driver *driver, int line, char ch);
 #endif
 	int (*proc_show)(struct seq_file *m, void *driver);
+
+	ANDROID_KABI_RESERVE(1);
+	ANDROID_KABI_RESERVE(2);
 } __randomize_layout;
 
 /**
  * struct tty_driver -- driver for TTY devices
  *
- * @magic: set to %TTY_DRIVER_MAGIC in __tty_alloc_driver()
  * @kref: reference counting. Reaching zero frees all the internals and the
  *	  driver.
  * @cdevs: allocated/registered character /dev devices
@@ -432,7 +435,6 @@ struct tty_operations {
  * @driver_name, @name, @type, @subtype, @init_termios, and @ops.
  */
 struct tty_driver {
-	int	magic;
 	struct kref kref;
 	struct cdev **cdevs;
 	struct module	*owner;
@@ -463,6 +465,9 @@ struct tty_driver {
 
 	const struct tty_operations *ops;
 	struct list_head tty_drivers;
+
+	ANDROID_KABI_RESERVE(1);
+	ANDROID_KABI_RESERVE(2);
 } __randomize_layout;
 
 extern struct list_head tty_drivers;
@@ -488,9 +493,6 @@ static inline void tty_set_operations(struct tty_driver *driver,
 {
 	driver->ops = op;
 }
-
-/* tty driver magic number */
-#define TTY_DRIVER_MAGIC		0x5402
 
 /**
  * DOC: TTY Driver Flags

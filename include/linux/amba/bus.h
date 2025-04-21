@@ -17,6 +17,7 @@
 #include <linux/err.h>
 #include <linux/resource.h>
 #include <linux/regulator/consumer.h>
+#include <linux/android_kabi.h>
 
 #define AMBA_NR_IRQS	9
 #define AMBA_CID	0xb105f00d
@@ -67,6 +68,7 @@ struct amba_device {
 	struct clk		*pclk;
 	struct device_dma_parameters dma_parms;
 	unsigned int		periphid;
+	struct mutex		periphid_lock;
 	unsigned int		cid;
 	struct amba_cs_uci_id	uci;
 	unsigned int		irq[AMBA_NR_IRQS];
@@ -75,6 +77,8 @@ struct amba_device {
 	 * frees it.  Use driver_set_override() to set or clear it.
 	 */
 	const char		*driver_override;
+
+	ANDROID_KABI_RESERVE(1);
 };
 
 struct amba_driver {
@@ -91,6 +95,8 @@ struct amba_driver {
 	 * to setup and manage their own I/O address space.
 	 */
 	bool driver_managed_dma;
+
+	ANDROID_KABI_RESERVE(1);
 };
 
 /*
@@ -106,7 +112,7 @@ enum amba_vendor {
 
 extern struct bus_type amba_bustype;
 
-#define to_amba_device(d)	container_of(d, struct amba_device, dev)
+#define to_amba_device(d)	container_of_const(d, struct amba_device, dev)
 
 #define amba_get_drvdata(d)	dev_get_drvdata(&d->dev)
 #define amba_set_drvdata(d,p)	dev_set_drvdata(&d->dev, p)

@@ -136,6 +136,9 @@ int arm_mmu500_reset(struct arm_smmu_device *smmu)
 		reg = arm_smmu_cb_read(smmu, i, ARM_SMMU_CB_ACTLR);
 		reg &= ~ARM_MMU500_ACTLR_CPRE;
 		arm_smmu_cb_write(smmu, i, ARM_SMMU_CB_ACTLR, reg);
+		reg = arm_smmu_cb_read(smmu, i, ARM_SMMU_CB_ACTLR);
+		if (reg & ARM_MMU500_ACTLR_CPRE)
+			dev_warn_once(smmu->dev, "Failed to disable prefetcher [errata #841119 and #826419], check ACR.CACHE_LOCK\n");
 	}
 
 	return 0;
@@ -215,6 +218,12 @@ struct arm_smmu_device *arm_smmu_impl_init(struct arm_smmu_device *smmu)
 	    of_device_is_compatible(np, "nvidia,tegra194-smmu") ||
 	    of_device_is_compatible(np, "nvidia,tegra186-smmu"))
 		return nvidia_smmu_impl_init(smmu);
+
+	if (of_device_is_compatible(smmu->dev->of_node, "qcom,qsmmu-v500"))
+		return qsmmuv500_impl_init(smmu);
+
+	if (of_device_is_compatible(smmu->dev->of_node, "qcom,smmu-v2"))
+		return qsmmuv2_impl_init(smmu);
 
 	if (IS_ENABLED(CONFIG_ARM_SMMU_QCOM))
 		smmu = qcom_smmu_impl_init(smmu);

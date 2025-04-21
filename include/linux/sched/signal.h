@@ -12,6 +12,7 @@
 #include <linux/posix-timers.h>
 #include <linux/mm_types.h>
 #include <asm/ptrace.h>
+#include <linux/android_kabi.h>
 
 /*
  * Types defining task->signal and task->sighand and APIs using them:
@@ -94,6 +95,7 @@ struct signal_struct {
 	refcount_t		sigcnt;
 	atomic_t		live;
 	int			nr_threads;
+	int			quick_threads;
 	struct list_head	thread_head;
 
 	wait_queue_head_t	wait_chldexit;	/* for wait4() */
@@ -134,7 +136,7 @@ struct signal_struct {
 #ifdef CONFIG_POSIX_TIMERS
 
 	/* POSIX.1b Interval Timers */
-	int			posix_timer_id;
+	unsigned int		next_posix_timer_id;
 	struct list_head	posix_timers;
 
 	/* ITIMER_REAL timer for the process */
@@ -244,6 +246,12 @@ struct signal_struct {
 						 * and may have inconsistent
 						 * permissions.
 						 */
+
+	ANDROID_KABI_RESERVE(1);
+	ANDROID_KABI_RESERVE(2);
+	ANDROID_KABI_RESERVE(3);
+	ANDROID_KABI_RESERVE(4);
+	ANDROID_OEM_DATA(1);
 } __randomize_layout;
 
 /*
@@ -648,12 +656,9 @@ extern void flush_itimer_signals(void);
 extern bool current_is_single_threaded(void);
 
 /*
- * Careful: do_each_thread/while_each_thread is a double loop so
- *          'break' will not work as expected - use goto instead.
+ * Without tasklist/siglock it is only rcu-safe if g can't exit/exec,
+ * otherwise next_thread(t) will never reach g after list_del_rcu(g).
  */
-#define do_each_thread(g, t) \
-	for (g = t = &init_task ; (g = t = next_task(g)) != &init_task ; ) do
-
 #define while_each_thread(g, t) \
 	while ((t = next_thread(t)) != g)
 

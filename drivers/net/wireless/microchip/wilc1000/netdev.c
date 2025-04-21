@@ -97,12 +97,12 @@ static struct net_device *get_if_handler(struct wilc *wilc, u8 *mac_header)
 	struct ieee80211_hdr *h = (struct ieee80211_hdr *)mac_header;
 
 	list_for_each_entry_rcu(vif, &wilc->vif_list, list) {
-		if (vif->mode == WILC_STATION_MODE)
+		if (vif->iftype == WILC_STATION_MODE)
 			if (ether_addr_equal_unaligned(h->addr2, vif->bssid)) {
 				ndev = vif->ndev;
 				goto out;
 			}
-		if (vif->mode == WILC_AP_MODE)
+		if (vif->iftype == WILC_AP_MODE)
 			if (ether_addr_equal_unaligned(h->addr1, vif->bssid)) {
 				ndev = vif->ndev;
 				goto out;
@@ -122,7 +122,7 @@ void wilc_wlan_set_bssid(struct net_device *wilc_netdev, const u8 *bssid,
 	else
 		eth_zero_addr(vif->bssid);
 
-	vif->mode = mode;
+	vif->iftype = mode;
 }
 
 int wilc_wlan_get_num_conn_ifcs(struct wilc *wilc)
@@ -472,7 +472,7 @@ static int wlan_initialize_threads(struct net_device *dev)
 				       "%s-tx", dev->name);
 	if (IS_ERR(wilc->txq_thread)) {
 		netdev_err(dev, "couldn't create TXQ thread\n");
-		wilc->close = 0;
+		wilc->close = 1;
 		return PTR_ERR(wilc->txq_thread);
 	}
 	wait_for_completion(&wilc->txq_thread_started);
@@ -730,6 +730,7 @@ netdev_tx_t wilc_mac_xmit(struct sk_buff *skb, struct net_device *ndev)
 
 	if (skb->dev != ndev) {
 		netdev_err(ndev, "Packet not destined to this device\n");
+		dev_kfree_skb(skb);
 		return NETDEV_TX_OK;
 	}
 
@@ -780,6 +781,7 @@ static int wilc_mac_close(struct net_device *ndev)
 	if (vif->ndev) {
 		netif_stop_queue(vif->ndev);
 
+		wilc_handle_disconnect(vif);
 		wilc_deinit_host_int(vif->ndev);
 	}
 
@@ -835,15 +837,24 @@ void wilc_frmw_to_host(struct wilc *wilc, u8 *buff, u32 size,
 	}
 }
 
-void wilc_wfi_mgmt_rx(struct wilc *wilc, u8 *buff, u32 size)
+void wilc_wfi_mgmt_rx(struct wilc *wilc, u8 *buff, u32 size, bool is_auth)
 {
 	int srcu_idx;
 	struct wilc_vif *vif;
 
 	srcu_idx = srcu_read_lock(&wilc->srcu);
 	list_for_each_entry_rcu(vif, &wilc->vif_list, list) {
+		struct ieee80211_mgmt *mgmt = (struct ieee80211_mgmt *)buff;
 		u16 type = le16_to_cpup((__le16 *)buff);
 		u32 type_bit = BIT(type >> 4);
+		u32 auth_bit = BIT(IEEE80211_STYPE_AUTH >> 4);
+
+		if ((vif->mgmt_reg_stypes & auth_bit &&
+		     ieee80211_is_auth(mgmt->frame_control)) &&
+		    vif->iftype == WILC_STATION_MODE && is_auth) {
+			wilc_wfi_mgmt_frame_rx(vif, buff, size);
+			break;
+		}
 
 		if (vif->priv.p2p_listen_state &&
 		    vif->mgmt_reg_stypes & type_bit)
@@ -867,8 +878,7 @@ static const struct net_device_ops wilc_netdev_ops = {
 
 void wilc_netdev_cleanup(struct wilc *wilc)
 {
-	struct wilc_vif *vif;
-	int srcu_idx, ifc_cnt = 0;
+	struct wilc_vif *vif, *vif_tmp;
 
 	if (!wilc)
 		return;
@@ -878,31 +888,18 @@ void wilc_netdev_cleanup(struct wilc *wilc)
 		wilc->firmware = NULL;
 	}
 
-	srcu_idx = srcu_read_lock(&wilc->srcu);
-	list_for_each_entry_rcu(vif, &wilc->vif_list, list) {
-		if (vif->ndev)
-			unregister_netdev(vif->ndev);
-	}
-	srcu_read_unlock(&wilc->srcu, srcu_idx);
-
-	wilc_wfi_deinit_mon_interface(wilc, false);
-	destroy_workqueue(wilc->hif_workqueue);
-
-	while (ifc_cnt < WILC_NUM_CONCURRENT_IFC) {
+	list_for_each_entry_safe(vif, vif_tmp, &wilc->vif_list, list) {
 		mutex_lock(&wilc->vif_mutex);
-		if (wilc->vif_num <= 0) {
-			mutex_unlock(&wilc->vif_mutex);
-			break;
-		}
-		vif = wilc_get_wl_to_vif(wilc);
-		if (!IS_ERR(vif))
-			list_del_rcu(&vif->list);
-
+		list_del_rcu(&vif->list);
 		wilc->vif_num--;
 		mutex_unlock(&wilc->vif_mutex);
 		synchronize_srcu(&wilc->srcu);
-		ifc_cnt++;
+		if (vif->ndev)
+			unregister_netdev(vif->ndev);
 	}
+
+	wilc_wfi_deinit_mon_interface(wilc, false);
+	destroy_workqueue(wilc->hif_workqueue);
 
 	wilc_wlan_cfg_deinit(wilc);
 	wlan_deinit_locks(wilc);
@@ -966,13 +963,6 @@ struct wilc_vif *wilc_netdev_ifc_init(struct wilc *wl, const char *name,
 		goto error;
 	}
 
-	wl->hif_workqueue = alloc_ordered_workqueue("%s-wq", WQ_MEM_RECLAIM,
-						    ndev->name);
-	if (!wl->hif_workqueue) {
-		ret = -ENOMEM;
-		goto error;
-	}
-
 	ndev->needs_free_netdev = true;
 	vif->iftype = vif_type;
 	vif->idx = wilc_get_available_idx(wl);
@@ -985,7 +975,11 @@ struct wilc_vif *wilc_netdev_ifc_init(struct wilc *wl, const char *name,
 
 	return vif;
 
-  error:
+error:
+	if (rtnl_locked)
+		cfg80211_unregister_netdevice(ndev);
+	else
+		unregister_netdev(ndev);
 	free_netdev(ndev);
 	return ERR_PTR(ret);
 }

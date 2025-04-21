@@ -14,7 +14,7 @@
  * wait a little bit and retry. This timeout, by default 3 seconds, gives
  * device time to start up. Required on BCM2708 and a few other chipsets.
  */
-#define MTD_DEFAULT_TIMEOUT	3
+#define MTD_DEFAULT_TIMEOUT	5
 
 #include <linux/module.h>
 #include <linux/delay.h>
@@ -30,6 +30,17 @@
 #include <linux/mount.h>
 #include <linux/slab.h>
 #include <linux/major.h>
+#include <linux/atomic.h>
+#include <linux/ctype.h>
+#include <linux/export.h>
+#include <linux/kexec.h>
+#include <linux/kmod.h>
+#include <linux/kmsg_dump.h>
+#include <linux/reboot.h>
+#include <linux/suspend.h>
+#include <linux/syscalls.h>
+#include <linux/syscore_ops.h>
+#include <linux/uaccess.h>
 
 /* Maximum number of comma-separated items in the 'block2mtd=' parameter */
 #define BLOCK2MTD_PARAM_MAX_COUNT 3
@@ -46,6 +57,18 @@ struct block2mtd_dev {
 /* Static info about the MTD, used in cleanup_module */
 static LIST_HEAD(blkmtd_device_list);
 
+// Mi ADD
+static int is_first_init = 1;
+struct device_init_info {
+    char* devname;
+    int erase_size;
+    size_t label;
+    int timeout;
+};
+
+static struct device_init_info* last_init_info = NULL;
+static struct task_struct *retry_thread = NULL;
+static char* block2mtd_device_name = NULL;
 
 static struct page *page_read(struct address_space *mapping, pgoff_t index)
 {
@@ -186,6 +209,8 @@ static int block2mtd_write(struct mtd_info *mtd, loff_t to, size_t len,
 	mutex_unlock(&dev->write_mutex);
 	if (err > 0)
 		err = 0;
+
+	dev->mtd._sync(mtd);
 	return err;
 }
 
@@ -209,40 +234,35 @@ static void block2mtd_free_device(struct block2mtd_dev *dev)
 	if (dev->blkdev) {
 		invalidate_mapping_pages(dev->blkdev->bd_inode->i_mapping,
 					0, -1);
-		blkdev_put(dev->blkdev, FMODE_READ|FMODE_WRITE|FMODE_EXCL);
+		blkdev_put(dev->blkdev, NULL);
 	}
 
 	kfree(dev);
 }
 
 
-static struct block2mtd_dev *add_device(char *devname, int erase_size,
-		char *label, int timeout)
+/*
+ * This function is marked __ref because it calls the __init marked
+ * early_lookup_bdev when called from the early boot code.
+ */
+static struct block_device __ref *mdtblock_early_get_bdev(const char *devname,
+		blk_mode_t mode, int timeout, struct block2mtd_dev *dev)
 {
+	struct block_device *bdev = ERR_PTR(-ENODEV);
 #ifndef MODULE
 	int i;
-#endif
-	const fmode_t mode = FMODE_READ | FMODE_WRITE | FMODE_EXCL;
-	struct block_device *bdev;
-	struct block2mtd_dev *dev;
-	char *name;
 
-	if (!devname)
-		return NULL;
+	/*
+	 * We can't use early_lookup_bdev from a running system.
+	 */
+	if (system_state >= SYSTEM_RUNNING)
+		return bdev;
 
-	dev = kzalloc(sizeof(struct block2mtd_dev), GFP_KERNEL);
-	if (!dev)
-		return NULL;
-
-	/* Get a handle on the device */
-	bdev = blkdev_get_by_path(devname, mode, dev);
-
-#ifndef MODULE
 	/*
 	 * We might not have the root device mounted at this point.
 	 * Try to resolve the device name by other means.
 	 */
-	for (i = 0; IS_ERR(bdev) && i <= timeout; i++) {
+	for (i = 0; i <= timeout; i++) {
 		dev_t devt;
 
 		if (i)
@@ -254,13 +274,56 @@ static struct block2mtd_dev *add_device(char *devname, int erase_size,
 			msleep(1000);
 		wait_for_device_probe();
 
-		devt = name_to_dev_t(devname);
-		if (!devt)
-			continue;
-		bdev = blkdev_get_by_dev(devt, mode, dev);
+		if (!early_lookup_bdev(devname, &devt)) {
+			bdev = blkdev_get_by_dev(devt, mode, dev, NULL);
+			if (!IS_ERR(bdev))
+				break;
+		}
 	}
 #endif
+	return bdev;
+}
 
+static int retry_add_device_thread_func(void* data);
+
+static struct block2mtd_dev *add_device(char *devname, int erase_size,
+		size_t label, int timeout)
+{
+	const blk_mode_t mode = BLK_OPEN_READ | BLK_OPEN_WRITE;
+	struct block_device *bdev;
+	struct block2mtd_dev *dev;
+	char *name;
+	int i;
+
+	if (!devname)
+		return NULL;
+
+	dev = kzalloc(sizeof(struct block2mtd_dev), GFP_KERNEL);
+	if (!dev)
+		return NULL;
+
+	/* Get a handle on the device */
+	bdev = blkdev_get_by_path(devname, mode, dev, NULL);
+
+	if(is_first_init == 0 && label == 1) {
+		pr_err("label = %zu: boot mode is recovery\n", label);
+		for (i = 0; IS_ERR(bdev) && i <= timeout; i++) {
+			if (i)
+				/*
+				* Calling wait_for_device_probe in the first loop
+				* was not enough, sleep for a bit in subsequent
+				* go-arounds.
+				*/
+				msleep(2000);
+			wait_for_device_probe();
+
+			pr_err("i %d, devname is %s\n", i, devname);
+			bdev = blkdev_get_by_path(devname, mode, dev, NULL);
+		}
+	}
+
+	if (IS_ERR(bdev))
+		bdev = mdtblock_early_get_bdev(devname, mode, timeout, dev);
 	if (IS_ERR(bdev)) {
 		pr_err("error: cannot open device %s\n", devname);
 		goto err_free_block2mtd;
@@ -279,12 +342,7 @@ static struct block2mtd_dev *add_device(char *devname, int erase_size,
 
 	mutex_init(&dev->write_mutex);
 
-	/* Setup the MTD structure */
-	/* make the name contain the block device in */
-	if (!label)
-		name = kasprintf(GFP_KERNEL, "block2mtd: %s", devname);
-	else
-		name = kstrdup(label, GFP_KERNEL);
+	name = kasprintf(GFP_KERNEL, "block2mtd: %s", devname);
 	if (!name)
 		goto err_destroy_mutex;
 
@@ -311,7 +369,7 @@ static struct block2mtd_dev *add_device(char *devname, int erase_size,
 	list_add(&dev->list, &blkmtd_device_list);
 	pr_info("mtd%d: [%s] erase_size = %dKiB [%d]\n",
 		dev->mtd.index,
-		label ? label : dev->mtd.name + strlen("block2mtd: "),
+		dev->mtd.name + strlen("block2mtd: "),
 		dev->mtd.erasesize >> 10, dev->mtd.erasesize);
 	return dev;
 
@@ -319,9 +377,44 @@ err_destroy_mutex:
 	mutex_destroy(&dev->write_mutex);
 err_free_block2mtd:
 	block2mtd_free_device(dev);
+	if (is_first_init == 1 && label == 1 && block2mtd_device_name != NULL) {
+        is_first_init = 0;
+        last_init_info = kzalloc(sizeof(struct device_init_info), GFP_KERNEL);
+        last_init_info->devname = block2mtd_device_name;
+        last_init_info->erase_size = erase_size;
+        last_init_info->label = label;
+        last_init_info->timeout = timeout;
+        pr_err("devname is %s, erase_size is %d, label is %zu, timeout is %d\n", block2mtd_device_name, erase_size, label, timeout);
+        retry_thread = kthread_run(retry_add_device_thread_func, NULL, "block2mtd_retry");
+    }
 	return NULL;
 }
 
+static int retry_add_device_thread_func(void* data) {
+    int retry_count = 2;
+    while (retry_count > 0 && last_init_info != NULL) {
+        if (add_device(last_init_info->devname, last_init_info->erase_size,
+                    last_init_info->label, last_init_info->timeout) != NULL) {
+            pr_err("devname is %s, erase_size is %d, label is %zu, timeout is %d\n", last_init_info->devname, last_init_info->erase_size, last_init_info->label, last_init_info->timeout);
+            if (last_init_info != NULL)
+                kfree(last_init_info);
+            if (block2mtd_device_name != NULL)
+                kfree(block2mtd_device_name);
+            last_init_info = NULL;
+            block2mtd_device_name = NULL;
+			break;
+        } else {
+            pr_err("sleep retry_count is %d", retry_count);
+            msleep(2000);
+        }
+        retry_count--;
+    }
+    if (last_init_info != NULL)
+        kfree(last_init_info);
+    if (block2mtd_device_name != NULL)
+        kfree(block2mtd_device_name);
+    return 0;
+}
 
 /* This function works similar to reguler strtoul.  In addition, it
  * allows some suffixes for a more human-readable number format:
@@ -389,7 +482,8 @@ static int block2mtd_setup2(const char *val)
 	char *str = buf;
 	char *token[BLOCK2MTD_PARAM_MAX_COUNT];
 	char *name;
-	char *label = NULL;
+	size_t label = 0;
+	size_t length = 32;
 	size_t erase_size = PAGE_SIZE;
 	unsigned long timeout = MTD_DEFAULT_TIMEOUT;
 	int i, ret;
@@ -430,9 +524,22 @@ static int block2mtd_setup2(const char *val)
 		}
 	}
 
-	if (token[2]) {
-		label = token[2];
-		pr_info("Using custom MTD label '%s' for dev %s\n", label, name);
+	if (token[2] && strlen(token[2])) {
+		ret = parse_num(&label, token[2]);
+		if (ret) {
+			pr_err("illegal label\n");
+			return 0;
+		}
+		pr_err("label is %zu\n", label);
+	}
+
+	if (label == 1) {
+		pr_err("block2mtd_setup2: mode is recovery\n");
+		block2mtd_device_name = (char *)kzalloc(length * sizeof(char), GFP_KERNEL);
+		if(block2mtd_device_name == NULL) {
+			pr_err("block2mtd_device_name kzalloc error\n");
+		}
+		strncpy(block2mtd_device_name, name, length - 1);
 	}
 
 	add_device(name, erase_size, label, timeout);
@@ -461,7 +568,7 @@ static int block2mtd_setup(const char *val, const struct kernel_param *kp)
 	   the device (even kmalloc() fails). Deter that work to
 	   block2mtd_setup2(). */
 
-	strlcpy(block2mtd_paramline, val, sizeof(block2mtd_paramline));
+	strscpy(block2mtd_paramline, val, sizeof(block2mtd_paramline));
 
 	return 0;
 #endif

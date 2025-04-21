@@ -19,6 +19,8 @@
 #include <linux/syscore_ops.h>
 #include <linux/uaccess.h>
 
+#include <trace/hooks/reboot.h>
+
 /*
  * this indicates whether you can reboot with ctrl-alt-del: the default is yes
  */
@@ -35,6 +37,7 @@ EXPORT_SYMBOL(cad_pid);
 enum reboot_mode reboot_mode DEFAULT_REBOOT_MODE;
 EXPORT_SYMBOL_GPL(reboot_mode);
 enum reboot_mode panic_reboot_mode = REBOOT_UNDEFINED;
+EXPORT_SYMBOL_GPL(panic_reboot_mode);
 
 /*
  * This variable is used privately to keep track of whether or not
@@ -74,6 +77,7 @@ void __weak (*pm_power_off)(void);
 void emergency_restart(void)
 {
 	kmsg_dump(KMSG_DUMP_EMERG);
+	system_state = SYSTEM_RESTART;
 	machine_emergency_restart();
 }
 EXPORT_SYMBOL_GPL(emergency_restart);
@@ -82,7 +86,6 @@ void kernel_restart_prepare(char *cmd)
 {
 	blocking_notifier_call_chain(&reboot_notifier_list, SYS_RESTART, cmd);
 	system_state = SYSTEM_RESTART;
-	try_block_console_kthreads(10000);
 	usermodehelper_disable();
 	device_shutdown();
 }
@@ -244,6 +247,17 @@ void migrate_to_reboot_cpu(void)
 	set_cpus_allowed_ptr(current, cpumask_of(cpu));
 }
 
+/*
+ *	Notifier list for kernel code which wants to be called
+ *	to prepare system for restart.
+ */
+static BLOCKING_NOTIFIER_HEAD(restart_prep_handler_list);
+
+static void do_kernel_restart_prepare(void)
+{
+	blocking_notifier_call_chain(&restart_prep_handler_list, 0, NULL);
+}
+
 /**
  *	kernel_restart - reboot the system
  *	@cmd: pointer to buffer containing command to execute for restart
@@ -255,6 +269,7 @@ void migrate_to_reboot_cpu(void)
 void kernel_restart(char *cmd)
 {
 	kernel_restart_prepare(cmd);
+	do_kernel_restart_prepare();
 	migrate_to_reboot_cpu();
 	syscore_shutdown();
 	if (!cmd)
@@ -271,7 +286,6 @@ static void kernel_shutdown_prepare(enum system_states state)
 	blocking_notifier_call_chain(&reboot_notifier_list,
 		(state == SYSTEM_HALT) ? SYS_HALT : SYS_POWER_OFF, NULL);
 	system_state = state;
-	try_block_console_kthreads(10000);
 	usermodehelper_disable();
 	device_shutdown();
 }
@@ -396,6 +410,11 @@ register_sys_off_handler(enum sys_off_mode mode,
 
 	case SYS_OFF_MODE_POWER_OFF:
 		handler->list = &power_off_handler_list;
+		break;
+
+	case SYS_OFF_MODE_RESTART_PREPARE:
+		handler->list = &restart_prep_handler_list;
+		handler->blocking = true;
 		break;
 
 	case SYS_OFF_MODE_RESTART:
@@ -821,11 +840,9 @@ static int __orderly_reboot(void)
 	ret = run_cmd(reboot_cmd);
 
 	if (ret) {
-		printk_prefer_direct_enter();
 		pr_warn("Failed to start orderly reboot: forcing the issue\n");
 		emergency_sync();
 		kernel_restart(NULL);
-		printk_prefer_direct_exit();
 	}
 
 	return ret;
@@ -838,7 +855,6 @@ static int __orderly_poweroff(bool force)
 	ret = run_cmd(poweroff_cmd);
 
 	if (ret && force) {
-		printk_prefer_direct_enter();
 		pr_warn("Failed to start orderly shutdown: forcing the issue\n");
 
 		/*
@@ -848,7 +864,6 @@ static int __orderly_poweroff(bool force)
 		 */
 		emergency_sync();
 		kernel_power_off();
-		printk_prefer_direct_exit();
 	}
 
 	return ret;
@@ -906,8 +921,6 @@ EXPORT_SYMBOL_GPL(orderly_reboot);
  */
 static void hw_failure_emergency_poweroff_func(struct work_struct *work)
 {
-	printk_prefer_direct_enter();
-
 	/*
 	 * We have reached here after the emergency shutdown waiting period has
 	 * expired. This means orderly_poweroff has not been able to shut off
@@ -924,8 +937,6 @@ static void hw_failure_emergency_poweroff_func(struct work_struct *work)
 	 */
 	pr_emerg("Hardware protection shutdown failed. Trying emergency restart\n");
 	emergency_restart();
-
-	printk_prefer_direct_exit();
 }
 
 static DECLARE_DELAYED_WORK(hw_failure_emergency_poweroff_work,
@@ -964,13 +975,13 @@ void hw_protection_shutdown(const char *reason, int ms_until_forced)
 {
 	static atomic_t allow_proceed = ATOMIC_INIT(1);
 
-	printk_prefer_direct_enter();
-
 	pr_emerg("HARDWARE PROTECTION shutdown (%s)\n", reason);
 
 	/* Shutdown should be initiated only once. */
 	if (!atomic_dec_and_test(&allow_proceed))
-		goto out;
+		return;
+
+	trace_android_rvh_hw_protection_shutdown(reason);
 
 	/*
 	 * Queue a backup emergency shutdown in the event of
@@ -978,8 +989,6 @@ void hw_protection_shutdown(const char *reason, int ms_until_forced)
 	 */
 	hw_failure_emergency_poweroff(ms_until_forced);
 	orderly_poweroff(true);
-out:
-	printk_prefer_direct_exit();
 }
 EXPORT_SYMBOL_GPL(hw_protection_shutdown);
 

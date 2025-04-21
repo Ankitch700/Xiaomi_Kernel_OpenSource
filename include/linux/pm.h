@@ -16,6 +16,7 @@
 #include <linux/timer.h>
 #include <linux/hrtimer.h>
 #include <linux/completion.h>
+#include <linux/android_kabi.h>
 
 /*
  * Callbacks for platform drivers to implement.
@@ -307,6 +308,8 @@ struct dev_pm_ops {
 	int (*runtime_suspend)(struct device *dev);
 	int (*runtime_resume)(struct device *dev);
 	int (*runtime_idle)(struct device *dev);
+
+	ANDROID_KABI_RESERVE(1);
 };
 
 #define SYSTEM_SLEEP_PM_OPS(suspend_fn, resume_fn) \
@@ -374,19 +377,39 @@ const struct dev_pm_ops name = { \
 	RUNTIME_PM_OPS(runtime_suspend_fn, runtime_resume_fn, idle_fn) \
 }
 
+#define _EXPORT_PM_OPS(name, license, ns)				\
+	const struct dev_pm_ops name;					\
+	__EXPORT_SYMBOL(name, license, ns);				\
+	const struct dev_pm_ops name
+
+#define _DISCARD_PM_OPS(name, license, ns)				\
+	static __maybe_unused const struct dev_pm_ops __static_##name
+
 #ifdef CONFIG_PM
-#define _EXPORT_DEV_PM_OPS(name, suspend_fn, resume_fn, runtime_suspend_fn, \
-			   runtime_resume_fn, idle_fn, sec, ns)		\
-	_DEFINE_DEV_PM_OPS(name, suspend_fn, resume_fn, runtime_suspend_fn, \
-			   runtime_resume_fn, idle_fn); \
-	__EXPORT_SYMBOL(name, sec, ns)
+#define _EXPORT_DEV_PM_OPS(name, license, ns)		_EXPORT_PM_OPS(name, license, ns)
+#define EXPORT_PM_FN_GPL(name)				EXPORT_SYMBOL_GPL(name)
+#define EXPORT_PM_FN_NS_GPL(name, ns)			EXPORT_SYMBOL_NS_GPL(name, ns)
 #else
-#define _EXPORT_DEV_PM_OPS(name, suspend_fn, resume_fn, runtime_suspend_fn, \
-			   runtime_resume_fn, idle_fn, sec, ns) \
-static __maybe_unused _DEFINE_DEV_PM_OPS(__static_##name, suspend_fn, \
-					 resume_fn, runtime_suspend_fn, \
-					 runtime_resume_fn, idle_fn)
+#define _EXPORT_DEV_PM_OPS(name, license, ns)		_DISCARD_PM_OPS(name, license, ns)
+#define EXPORT_PM_FN_GPL(name)
+#define EXPORT_PM_FN_NS_GPL(name, ns)
 #endif
+
+#ifdef CONFIG_PM_SLEEP
+#define _EXPORT_DEV_SLEEP_PM_OPS(name, license, ns)	_EXPORT_PM_OPS(name, license, ns)
+#else
+#define _EXPORT_DEV_SLEEP_PM_OPS(name, license, ns)	_DISCARD_PM_OPS(name, license, ns)
+#endif
+
+#define EXPORT_DEV_PM_OPS(name)				_EXPORT_DEV_PM_OPS(name, "", "")
+#define EXPORT_GPL_DEV_PM_OPS(name)			_EXPORT_DEV_PM_OPS(name, "GPL", "")
+#define EXPORT_NS_DEV_PM_OPS(name, ns)			_EXPORT_DEV_PM_OPS(name, "", #ns)
+#define EXPORT_NS_GPL_DEV_PM_OPS(name, ns)		_EXPORT_DEV_PM_OPS(name, "GPL", #ns)
+
+#define EXPORT_DEV_SLEEP_PM_OPS(name)			_EXPORT_DEV_SLEEP_PM_OPS(name, "", "")
+#define EXPORT_GPL_DEV_SLEEP_PM_OPS(name)		_EXPORT_DEV_SLEEP_PM_OPS(name, "GPL", "")
+#define EXPORT_NS_DEV_SLEEP_PM_OPS(name, ns)		_EXPORT_DEV_SLEEP_PM_OPS(name, "", #ns)
+#define EXPORT_NS_GPL_DEV_SLEEP_PM_OPS(name, ns)	_EXPORT_DEV_SLEEP_PM_OPS(name, "GPL", #ns)
 
 /*
  * Use this if you want to use the same suspend and resume callbacks for suspend
@@ -399,13 +422,21 @@ static __maybe_unused _DEFINE_DEV_PM_OPS(__static_##name, suspend_fn, \
 	_DEFINE_DEV_PM_OPS(name, suspend_fn, resume_fn, NULL, NULL, NULL)
 
 #define EXPORT_SIMPLE_DEV_PM_OPS(name, suspend_fn, resume_fn) \
-	_EXPORT_DEV_PM_OPS(name, suspend_fn, resume_fn, NULL, NULL, NULL, "", "")
+	EXPORT_DEV_SLEEP_PM_OPS(name) = { \
+		SYSTEM_SLEEP_PM_OPS(suspend_fn, resume_fn) \
+	}
 #define EXPORT_GPL_SIMPLE_DEV_PM_OPS(name, suspend_fn, resume_fn) \
-	_EXPORT_DEV_PM_OPS(name, suspend_fn, resume_fn, NULL, NULL, NULL, "_gpl", "")
+	EXPORT_GPL_DEV_SLEEP_PM_OPS(name) = { \
+		SYSTEM_SLEEP_PM_OPS(suspend_fn, resume_fn) \
+	}
 #define EXPORT_NS_SIMPLE_DEV_PM_OPS(name, suspend_fn, resume_fn, ns)	\
-	_EXPORT_DEV_PM_OPS(name, suspend_fn, resume_fn, NULL, NULL, NULL, "", #ns)
+	EXPORT_NS_DEV_SLEEP_PM_OPS(name, ns) = { \
+		SYSTEM_SLEEP_PM_OPS(suspend_fn, resume_fn) \
+	}
 #define EXPORT_NS_GPL_SIMPLE_DEV_PM_OPS(name, suspend_fn, resume_fn, ns)	\
-	_EXPORT_DEV_PM_OPS(name, suspend_fn, resume_fn, NULL, NULL, NULL, "_gpl", #ns)
+	EXPORT_NS_GPL_DEV_SLEEP_PM_OPS(name, ns) = { \
+		SYSTEM_SLEEP_PM_OPS(suspend_fn, resume_fn) \
+	}
 
 /* Deprecated. Use DEFINE_SIMPLE_DEV_PM_OPS() instead. */
 #define SIMPLE_DEV_PM_OPS(name, suspend_fn, resume_fn) \
@@ -433,6 +464,15 @@ const struct dev_pm_ops __maybe_unused name = { \
 const struct dev_pm_ops __maybe_unused name = { \
 	SET_SYSTEM_SLEEP_PM_OPS(suspend_fn, resume_fn) \
 	SET_RUNTIME_PM_OPS(suspend_fn, resume_fn, idle_fn) \
+}
+
+/*
+ * Use this if you want to have the suspend and resume callbacks be called
+ * with IRQs disabled.
+ */
+#define DEFINE_NOIRQ_DEV_PM_OPS(name, suspend_fn, resume_fn) \
+const struct dev_pm_ops name = { \
+	NOIRQ_SYSTEM_SLEEP_PM_OPS(suspend_fn, resume_fn) \
 }
 
 #define pm_ptr(_ptr) PTR_IF(IS_ENABLED(CONFIG_PM), (_ptr))
@@ -683,6 +723,9 @@ struct dev_pm_info {
 	struct pm_subsys_data	*subsys_data;  /* Owned by the subsystem. */
 	void (*set_latency_tolerance)(struct device *, s32);
 	struct dev_pm_qos	*qos;
+
+	ANDROID_KABI_RESERVE(1);
+	ANDROID_KABI_RESERVE(2);
 };
 
 extern int dev_pm_get_subsys_data(struct device *dev);
@@ -697,6 +740,7 @@ extern void dev_pm_put_subsys_data(struct device *dev);
  * @activate: Called before executing probe routines for bus types and drivers.
  * @sync: Called after successful driver probe.
  * @dismiss: Called after unsuccessful driver probe and after driver removal.
+ * @set_performance_state: Called to request a new performance state.
  *
  * Power domains provide callbacks that are executed during system suspend,
  * hibernation, system resume and during runtime PM transitions instead of
@@ -709,6 +753,9 @@ struct dev_pm_domain {
 	int (*activate)(struct device *dev);
 	void (*sync)(struct device *dev);
 	void (*dismiss)(struct device *dev);
+	int (*set_performance_state)(struct device *dev, unsigned int state);
+
+	ANDROID_KABI_RESERVE(1);
 };
 
 /*

@@ -34,6 +34,7 @@
 
 #include "usb.h"
 
+#include <trace/hooks/usb.h>
 
 /*
  * Adds a new dynamic USBdevice ID to this driver,
@@ -899,14 +900,14 @@ static int usb_device_match(struct device *dev, struct device_driver *drv)
 	return 0;
 }
 
-static int usb_uevent(struct device *dev, struct kobj_uevent_env *env)
+static int usb_uevent(const struct device *dev, struct kobj_uevent_env *env)
 {
-	struct usb_device *usb_dev;
+	const struct usb_device *usb_dev;
 
 	if (is_usb_device(dev)) {
 		usb_dev = to_usb_device(dev);
 	} else if (is_usb_interface(dev)) {
-		struct usb_interface *intf = to_usb_interface(dev);
+		const struct usb_interface *intf = to_usb_interface(dev);
 
 		usb_dev = interface_to_usbdev(intf);
 	} else {
@@ -1400,9 +1401,14 @@ static int usb_suspend_both(struct usb_device *udev, pm_message_t msg)
 	int			status = 0;
 	int			i = 0, n = 0;
 	struct usb_interface	*intf;
+	int			bypass = 0;
 
 	if (udev->state == USB_STATE_NOTATTACHED ||
 			udev->state == USB_STATE_SUSPENDED)
+		goto done;
+
+	trace_android_rvh_usb_dev_suspend(udev, msg, &bypass);
+	if (bypass)
 		goto done;
 
 	/* Suspend all the interfaces and then udev itself */
@@ -1482,7 +1488,7 @@ static int usb_suspend_both(struct usb_device *udev, pm_message_t msg)
  * @msg: Power Management message describing this state transition
  *
  * This is the central routine for resuming USB devices.  It calls the
- * the resume method for @udev and then calls the resume methods for all
+ * resume method for @udev and then calls the resume methods for all
  * the interface drivers in @udev.
  *
  * Autoresume requests originating from a child device or an interface
@@ -1501,11 +1507,17 @@ static int usb_resume_both(struct usb_device *udev, pm_message_t msg)
 	int			status = 0;
 	int			i;
 	struct usb_interface	*intf;
+	int			bypass = 0;
 
 	if (udev->state == USB_STATE_NOTATTACHED) {
 		status = -ENODEV;
 		goto done;
 	}
+
+	trace_android_vh_usb_dev_resume(udev, msg, &bypass);
+	if (bypass)
+		goto done;
+
 	udev->can_submit = 1;
 
 	/* Resume the device */
@@ -2025,7 +2037,7 @@ int usb_disable_usb2_hardware_lpm(struct usb_device *udev)
 
 #endif /* CONFIG_PM */
 
-struct bus_type usb_bus_type = {
+const struct bus_type usb_bus_type = {
 	.name =		"usb",
 	.match =	usb_device_match,
 	.uevent =	usb_uevent,

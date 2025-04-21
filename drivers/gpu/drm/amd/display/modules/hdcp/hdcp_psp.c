@@ -202,6 +202,10 @@ static enum mod_hdcp_status add_display_to_topology_v3(
 	dtm_cmd->dtm_status = TA_DTM_STATUS__GENERIC_FAILURE;
 	dtm_cmd->dtm_in_message.topology_update_v3.phy_id = link->phy_idx;
 	dtm_cmd->dtm_in_message.topology_update_v3.link_hdcp_cap = link->hdcp_supported_informational;
+	dtm_cmd->dtm_in_message.topology_update_v3.dio_output_type = link->dp.usb4_enabled ?
+			TA_DTM_DIO_OUTPUT_TYPE__DPIA :
+			TA_DTM_DIO_OUTPUT_TYPE__DIRECT;
+	dtm_cmd->dtm_in_message.topology_update_v3.dio_output_id = link->dio_output_id;
 
 	psp_dtm_invoke(psp, dtm_cmd->cmd_id);
 	mutex_unlock(&psp->dtm_context.mutex);
@@ -508,6 +512,9 @@ enum mod_hdcp_status mod_hdcp_hdcp2_create_session(struct mod_hdcp *hdcp)
 
 	hdcp_cmd = (struct ta_hdcp_shared_memory *)psp->hdcp_context.context.mem_context.shared_buf;
 	memset(hdcp_cmd, 0, sizeof(struct ta_hdcp_shared_memory));
+
+	if (!display)
+		return MOD_HDCP_STATUS_DISPLAY_NOT_FOUND;
 
 	hdcp_cmd->in_msg.hdcp2_create_session_v2.display_handle = display->index;
 

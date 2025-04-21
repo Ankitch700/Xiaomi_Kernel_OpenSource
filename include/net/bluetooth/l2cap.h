@@ -29,6 +29,7 @@
 
 #include <asm/unaligned.h>
 #include <linux/atomic.h>
+#include <linux/android_kabi.h>
 
 /* L2CAP defaults */
 #define L2CAP_DEFAULT_MTU		672
@@ -58,8 +59,6 @@
 #define L2CAP_MOVE_ERTX_TIMEOUT		msecs_to_jiffies(60000)
 #define L2CAP_WAIT_ACK_POLL_PERIOD	msecs_to_jiffies(200)
 #define L2CAP_WAIT_ACK_TIMEOUT		msecs_to_jiffies(10000)
-
-#define L2CAP_A2MP_DEFAULT_MTU		670
 
 /* L2CAP socket address */
 struct sockaddr_l2 {
@@ -109,12 +108,6 @@ struct l2cap_conninfo {
 #define L2CAP_ECHO_RSP		0x09
 #define L2CAP_INFO_REQ		0x0a
 #define L2CAP_INFO_RSP		0x0b
-#define L2CAP_CREATE_CHAN_REQ	0x0c
-#define L2CAP_CREATE_CHAN_RSP	0x0d
-#define L2CAP_MOVE_CHAN_REQ	0x0e
-#define L2CAP_MOVE_CHAN_RSP	0x0f
-#define L2CAP_MOVE_CHAN_CFM	0x10
-#define L2CAP_MOVE_CHAN_CFM_RSP	0x11
 #define L2CAP_CONN_PARAM_UPDATE_REQ	0x12
 #define L2CAP_CONN_PARAM_UPDATE_RSP	0x13
 #define L2CAP_LE_CONN_REQ	0x14
@@ -144,7 +137,6 @@ struct l2cap_conninfo {
 /* L2CAP fixed channels */
 #define L2CAP_FC_SIG_BREDR	0x02
 #define L2CAP_FC_CONNLESS	0x04
-#define L2CAP_FC_A2MP		0x08
 #define L2CAP_FC_ATT		0x10
 #define L2CAP_FC_SIG_LE		0x20
 #define L2CAP_FC_SMP_LE		0x40
@@ -267,7 +259,6 @@ struct l2cap_conn_rsp {
 /* channel identifier */
 #define L2CAP_CID_SIGNALING	0x0001
 #define L2CAP_CID_CONN_LESS	0x0002
-#define L2CAP_CID_A2MP		0x0003
 #define L2CAP_CID_ATT		0x0004
 #define L2CAP_CID_LE_SIGNALING	0x0005
 #define L2CAP_CID_SMP		0x0006
@@ -282,7 +273,6 @@ struct l2cap_conn_rsp {
 #define L2CAP_CR_BAD_PSM	0x0002
 #define L2CAP_CR_SEC_BLOCK	0x0003
 #define L2CAP_CR_NO_MEM		0x0004
-#define L2CAP_CR_BAD_AMP	0x0005
 #define L2CAP_CR_INVALID_SCID	0x0006
 #define L2CAP_CR_SCID_IN_USE	0x0007
 
@@ -404,29 +394,6 @@ struct l2cap_info_rsp {
 	__u8        data[];
 } __packed;
 
-struct l2cap_create_chan_req {
-	__le16      psm;
-	__le16      scid;
-	__u8        amp_id;
-} __packed;
-
-struct l2cap_create_chan_rsp {
-	__le16      dcid;
-	__le16      scid;
-	__le16      result;
-	__le16      status;
-} __packed;
-
-struct l2cap_move_chan_req {
-	__le16      icid;
-	__u8        dest_amp_id;
-} __packed;
-
-struct l2cap_move_chan_rsp {
-	__le16      icid;
-	__le16      result;
-} __packed;
-
 #define L2CAP_MR_SUCCESS	0x0000
 #define L2CAP_MR_PEND		0x0001
 #define L2CAP_MR_BAD_ID		0x0002
@@ -539,8 +506,6 @@ struct l2cap_seq_list {
 
 struct l2cap_chan {
 	struct l2cap_conn	*conn;
-	struct hci_conn		*hs_hcon;
-	struct hci_chan		*hs_hchan;
 	struct kref	kref;
 	atomic_t	nesting;
 
@@ -591,12 +556,6 @@ struct l2cap_chan {
 	unsigned long	conn_state;
 	unsigned long	flags;
 
-	__u8		remote_amp_id;
-	__u8		local_amp_id;
-	__u8		move_id;
-	__u8		move_state;
-	__u8		move_role;
-
 	__u16		next_tx_seq;
 	__u16		expected_ack_seq;
 	__u16		expected_tx_seq;
@@ -645,6 +604,9 @@ struct l2cap_chan {
 	void			*data;
 	const struct l2cap_ops	*ops;
 	struct mutex		lock;
+
+	ANDROID_KABI_RESERVE(1);
+	ANDROID_KABI_RESERVE(2);
 };
 
 struct l2cap_ops {
@@ -669,6 +631,9 @@ struct l2cap_ops {
 					       unsigned long len, int nb);
 	int			(*filter) (struct l2cap_chan * chan,
 					   struct sk_buff *skb);
+
+	ANDROID_KABI_RESERVE(1);
+	ANDROID_KABI_RESERVE(2);
 };
 
 struct l2cap_conn {
@@ -694,7 +659,7 @@ struct l2cap_conn {
 	struct sk_buff_head	pending_rx;
 	struct work_struct	pending_rx_work;
 
-	struct work_struct	id_addr_update_work;
+	struct delayed_work	id_addr_timer;
 
 	__u8			disc_reason;
 
@@ -704,6 +669,9 @@ struct l2cap_conn {
 	struct mutex		chan_lock;
 	struct kref		ref;
 	struct list_head	users;
+
+	ANDROID_KABI_RESERVE(1);
+	ANDROID_KABI_RESERVE(2);
 };
 
 struct l2cap_user {
@@ -847,6 +815,7 @@ enum {
 };
 
 void l2cap_chan_hold(struct l2cap_chan *c);
+struct l2cap_chan *l2cap_chan_hold_unless_zero(struct l2cap_chan *c);
 void l2cap_chan_put(struct l2cap_chan *c);
 
 static inline void l2cap_chan_lock(struct l2cap_chan *chan)

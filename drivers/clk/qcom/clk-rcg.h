@@ -1,5 +1,6 @@
-/* SPDX-License-Identifier: GPL-2.0 */
-/* Copyright (c) 2013, 2018, The Linux Foundation. All rights reserved. */
+/* SPDX-License-Identifier: GPL-2.0-only */
+/* Copyright (c) 2013, 2016-2018, 2020 The Linux Foundation. All rights reserved. */
+/* Copyright (c) 2022, Qualcomm Innovation Center, Inc. All rights reserved. */
 
 #ifndef __QCOM_CLK_RCG_H__
 #define __QCOM_CLK_RCG_H__
@@ -15,6 +16,8 @@ struct freq_tbl {
 	u8 pre_div;
 	u16 m;
 	u16 n;
+	unsigned long src_freq;
+#define FIXED_FREQ_SRC   0
 };
 
 /**
@@ -138,9 +141,13 @@ extern const struct clk_ops clk_dyn_rcg_ops;
  * @safe_src_index: safe src index value
  * @parent_map: map from software's parent index to hardware's src_sel field
  * @freq_tbl: frequency table
+ * @current_freq: last cached frequency when using branches with shared RCGs
+ * @enable_safe_config: When set, the RCG is parked at CXO when it's disabled
  * @clkr: regmap clock handle
  * @cfg_off: defines the cfg register offset from the CMD_RCGR + CFG_REG
  * @parked_cfg: cached value of the CFG register for parked RCGs
+ * @flags: additional flag parameters for the RCG
+ * @hw_clk_ctrl: whether to enable hardware clock control
  */
 struct clk_rcg2 {
 	u32			cmd_rcgr;
@@ -149,9 +156,18 @@ struct clk_rcg2 {
 	u8			safe_src_index;
 	const struct parent_map	*parent_map;
 	const struct freq_tbl	*freq_tbl;
+	unsigned long		configured_freq;
+	unsigned long		current_freq;
+	bool			enable_safe_config;
 	struct clk_regmap	clkr;
 	u8			cfg_off;
 	u32			parked_cfg;
+	u8			flags;
+#define FORCE_ENABLE_RCG	BIT(0)
+#define HW_CLK_CTRL_MODE	BIT(1)
+#define DFS_SUPPORT		BIT(2)
+	bool			freq_populated;
+	bool			hw_clk_ctrl;
 };
 
 #define to_clk_rcg2(_hw) container_of(to_clk_regmap(_hw), struct clk_rcg2, clkr)
@@ -167,6 +183,7 @@ struct clk_rcg2_gfx3d {
 
 extern const struct clk_ops clk_rcg2_ops;
 extern const struct clk_ops clk_rcg2_floor_ops;
+extern const struct clk_ops clk_rcg2_mux_closest_ops;
 extern const struct clk_ops clk_edp_pixel_ops;
 extern const struct clk_ops clk_byte_ops;
 extern const struct clk_ops clk_byte2_ops;
@@ -174,6 +191,8 @@ extern const struct clk_ops clk_pixel_ops;
 extern const struct clk_ops clk_gfx3d_ops;
 extern const struct clk_ops clk_rcg2_shared_ops;
 extern const struct clk_ops clk_dp_ops;
+extern const struct clk_ops clk_rcg2_crmc_ops;
+extern const struct clk_ops clk_rcg2_crmb_ops;
 
 struct clk_rcg_dfs_data {
 	struct clk_rcg2 *rcg;

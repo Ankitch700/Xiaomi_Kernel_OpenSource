@@ -39,6 +39,17 @@ config UDMABUF
 	  A driver to let userspace turn memfd regions into dma-bufs.
 	  Qemu can use this to create host dmabufs for guest framebuffers.
 
+config DEBUG_DMA_BUF_REF
+	tristate "DEBUG Reference Count"
+	default n
+	depends on STACKDEPOT
+	depends on DMA_SHARED_BUFFER
+	help
+	  Save stack traces for every call to qcom heap alloc and release, to
+	  help debug memory leaks. Potential leaks may be found by manually
+	  matching the call stacks.  This feature consumes extra memory
+	  in order to save the stack traces using STACKDEPOT.
+
 config DMABUF_MOVE_NOTIFY
 	bool "Move notify between drivers (EXPERIMENTAL)"
 	default n
@@ -75,7 +86,7 @@ menuconfig DMABUF_HEAPS
 	  between drivers.
 
 menuconfig DMABUF_SYSFS_STATS
-	bool "DMA-BUF sysfs statistics"
+	bool "DMA-BUF sysfs statistics (DEPRECATED)"
 	depends on DMA_SHARED_BUFFER
 	help
 	   Choose this option to enable DMA-BUF sysfs statistics
@@ -84,6 +95,10 @@ menuconfig DMABUF_SYSFS_STATS
 	   /sys/kernel/dmabuf/buffers/<inode_number> will contain
 	   statistics for the DMA-BUF with the unique inode number
 	   <inode_number>.
+
+	   This option is deprecated and should sooner or later be removed.
+	   Android is the only user of this and it turned out that this resulted
+	   in quite some performance problems.
 
 source "drivers/dma-buf/heaps/Kconfig"
 

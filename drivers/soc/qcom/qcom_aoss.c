@@ -3,6 +3,7 @@
  * Copyright (c) 2019, Linaro Ltd
  */
 #include <linux/clk-provider.h>
+#include <linux/debugfs.h>
 #include <linux/interrupt.h>
 #include <linux/io.h>
 #include <linux/mailbox_client.h>
@@ -12,6 +13,7 @@
 #include <linux/thermal.h>
 #include <linux/slab.h>
 #include <linux/soc/qcom/qcom_aoss.h>
+#include <linux/ipc_logging.h>
 
 #define QMP_DESC_MAGIC			0x0
 #define QMP_DESC_VERSION		0x4
@@ -39,8 +41,8 @@
 #define QMP_MAGIC			0x4d41494c /* mail */
 #define QMP_VERSION			1
 
-/* 64 bytes is enough to store the requests and provides padding to 4 bytes */
-#define QMP_MSG_LEN			64
+/* 0x64 bytes is enough to store the requests and provides padding to 4 bytes */
+#define QMP_MSG_LEN			0x64
 
 #define QMP_NUM_COOLING_RESOURCES	2
 
@@ -82,7 +84,16 @@ struct qmp {
 
 	struct clk_hw qdss_clk;
 	struct qmp_cooling_device *cooling_devs;
+#if IS_ENABLED(CONFIG_DEBUG_FS)
+	struct dentry *debugfs_file;
+#endif /* CONFIG_DEBUG_FS */
 };
+
+/* IPC Logging helpers */
+#define AOSS_IPC_LOG_PAGE_CNT	2
+static void *ilc;
+#define AOSS_INFO(x, ...)						  \
+	ipc_log_string(ilc, "[%s]: "x, __func__, ##__VA_ARGS__)
 
 static void qmp_kick(struct qmp *qmp)
 {
@@ -192,6 +203,7 @@ static irqreturn_t qmp_intr(int irq, void *data)
 {
 	struct qmp *qmp = data;
 
+	AOSS_INFO("\n");
 	wake_up_all(&qmp->event);
 
 	return IRQ_HANDLED;
@@ -199,45 +211,52 @@ static irqreturn_t qmp_intr(int irq, void *data)
 
 static bool qmp_message_empty(struct qmp *qmp)
 {
+	AOSS_INFO("ack msg size: %u\n", readl(qmp->msgram + qmp->offset));
 	return readl(qmp->msgram + qmp->offset) == 0;
 }
 
 /**
  * qmp_send() - send a message to the AOSS
  * @qmp: qmp context
- * @data: message to be sent
- * @len: length of the message
+ * @fmt: format string for message to be sent
+ * @...: arguments for the format string
  *
- * Transmit @data to AOSS and wait for the AOSS to acknowledge the message.
- * @len must be a multiple of 4 and not longer than the mailbox size. Access is
- * synchronized by this implementation.
+ * Transmit message to AOSS and wait for the AOSS to acknowledge the message.
+ * data must not be longer than the mailbox size. Access is synchronized by
+ * this implementation.
  *
  * Return: 0 on success, negative errno on failure
  */
-int qmp_send(struct qmp *qmp, const void *data, size_t len)
+int qmp_send(struct qmp *qmp, const char *fmt, ...)
 {
+	char buf[QMP_MSG_LEN];
 	long time_left;
+	va_list args;
+	int len;
 	int ret;
 
-	if (WARN_ON(IS_ERR_OR_NULL(qmp) || !data))
+	if (WARN_ON(IS_ERR_OR_NULL(qmp) || !fmt))
 		return -EINVAL;
 
-	if (WARN_ON(len + sizeof(u32) > qmp->size))
-		return -EINVAL;
+	memset(buf, 0, sizeof(buf));
+	va_start(args, fmt);
+	len = vsnprintf(buf, sizeof(buf), fmt, args);
+	va_end(args);
 
-	if (WARN_ON(len % sizeof(u32)))
+	if (WARN_ON(len >= sizeof(buf)))
 		return -EINVAL;
 
 	mutex_lock(&qmp->tx_lock);
 
 	/* The message RAM only implements 32-bit accesses */
 	__iowrite32_copy(qmp->msgram + qmp->offset + sizeof(u32),
-			 data, len / sizeof(u32));
-	writel(len, qmp->msgram + qmp->offset);
+			 buf, sizeof(buf) / sizeof(u32));
+	writel(sizeof(buf), qmp->msgram + qmp->offset);
 
-	/* Read back len to confirm data written in message RAM */
+	/* Read back length to confirm data written in message RAM */
 	readl(qmp->msgram + qmp->offset);
 	qmp_kick(qmp);
+	AOSS_INFO("msg: %.*s\n", min_t(int, len, QMP_MSG_LEN), (char *)fmt);
 
 	time_left = wait_event_interruptible_timeout(qmp->event,
 						     qmp_message_empty(qmp), HZ);
@@ -246,9 +265,15 @@ int qmp_send(struct qmp *qmp, const void *data, size_t len)
 		ret = -ETIMEDOUT;
 
 		/* Clear message from buffer */
+		AOSS_INFO("timed out clearing msg: %.*s\n", min_t(int, len, QMP_MSG_LEN),
+			  (char *)fmt);
 		writel(0, qmp->msgram + qmp->offset);
+	} else if (time_left < 0) {
+		dev_err(qmp->dev, "wait error %ld\n", time_left);
+		ret = time_left;
 	} else {
 		ret = 0;
+		AOSS_INFO("ack: %.*s\n", min_t(int, len, QMP_MSG_LEN), (char *)fmt);
 	}
 
 	mutex_unlock(&qmp->tx_lock);
@@ -259,18 +284,18 @@ EXPORT_SYMBOL(qmp_send);
 
 static int qmp_qdss_clk_prepare(struct clk_hw *hw)
 {
-	static const char buf[QMP_MSG_LEN] = "{class: clock, res: qdss, val: 1}";
+	static const char *buf = "{class: clock, res: qdss, val: 1}";
 	struct qmp *qmp = container_of(hw, struct qmp, qdss_clk);
 
-	return qmp_send(qmp, buf, sizeof(buf));
+	return qmp_send(qmp, buf);
 }
 
 static void qmp_qdss_clk_unprepare(struct clk_hw *hw)
 {
-	static const char buf[QMP_MSG_LEN] = "{class: clock, res: qdss, val: 0}";
+	static const char *buf = "{class: clock, res: qdss, val: 0}";
 	struct qmp *qmp = container_of(hw, struct qmp, qdss_clk);
 
-	qmp_send(qmp, buf, sizeof(buf));
+	qmp_send(qmp, buf);
 }
 
 static const struct clk_ops qmp_qdss_clk_ops = {
@@ -329,7 +354,6 @@ static int qmp_cdev_set_cur_state(struct thermal_cooling_device *cdev,
 				  unsigned long state)
 {
 	struct qmp_cooling_device *qmp_cdev = cdev->devdata;
-	char buf[QMP_MSG_LEN] = {};
 	bool cdev_state;
 	int ret;
 
@@ -339,13 +363,8 @@ static int qmp_cdev_set_cur_state(struct thermal_cooling_device *cdev,
 	if (qmp_cdev->state == state)
 		return 0;
 
-	snprintf(buf, sizeof(buf),
-		 "{class: volt_flr, event:zero_temp, res:%s, value:%s}",
-			qmp_cdev->name,
-			cdev_state ? "on" : "off");
-
-	ret = qmp_send(qmp_cdev->qmp, buf, sizeof(buf));
-
+	ret = qmp_send(qmp_cdev->qmp, "{class: volt_flr, event:zero_temp, res:%s, value:%s}",
+		       qmp_cdev->name, cdev_state ? "on" : "off");
 	if (!ret)
 		qmp_cdev->state = cdev_state;
 
@@ -395,12 +414,14 @@ static int qmp_cooling_devices_register(struct qmp *qmp)
 		return -ENOMEM;
 
 	for_each_available_child_of_node(np, child) {
-		if (!of_find_property(child, "#cooling-cells", NULL))
+		if (!of_property_present(child, "#cooling-cells"))
 			continue;
 		ret = qmp_cooling_device_add(qmp, &qmp->cooling_devs[count++],
 					     child);
-		if (ret)
+		if (ret) {
+			of_node_put(child);
 			goto unroll;
+		}
 	}
 
 	if (!count)
@@ -474,6 +495,32 @@ void qmp_put(struct qmp *qmp)
 }
 EXPORT_SYMBOL(qmp_put);
 
+#if IS_ENABLED(CONFIG_DEBUG_FS)
+static ssize_t aoss_dbg_write(struct file *file, const char __user *userstr,
+			      size_t len, loff_t *pos)
+{
+	struct qmp *qmp = file->private_data;
+	char buf[QMP_MSG_LEN] = {};
+	int ret;
+
+	if (!len || len >= QMP_MSG_LEN)
+		return -EINVAL;
+
+	ret = copy_from_user(buf, userstr, len);
+	if (ret)
+		return -EFAULT;
+
+	ret = qmp_send(qmp, strim(buf), QMP_MSG_LEN);
+
+	return ret ? ret : len;
+}
+
+static const struct file_operations aoss_dbg_fops = {
+	.open = simple_open,
+	.write = aoss_dbg_write,
+};
+#endif /* CONFIG_DEBUG_FS */
+
 static int qmp_probe(struct platform_device *pdev)
 {
 	struct qmp *qmp;
@@ -487,6 +534,7 @@ static int qmp_probe(struct platform_device *pdev)
 	qmp->dev = &pdev->dev;
 	init_waitqueue_head(&qmp->event);
 	mutex_init(&qmp->tx_lock);
+	ilc = ipc_log_context_create(AOSS_IPC_LOG_PAGE_CNT, "aoss", 0);
 
 	qmp->msgram = devm_platform_ioremap_resource(pdev, 0);
 	if (IS_ERR(qmp->msgram))
@@ -507,6 +555,7 @@ static int qmp_probe(struct platform_device *pdev)
 		dev_err(&pdev->dev, "failed to request interrupt\n");
 		goto err_free_mbox;
 	}
+	enable_irq_wake(irq);
 
 	ret = qmp_open(qmp);
 	if (ret < 0)
@@ -522,6 +571,11 @@ static int qmp_probe(struct platform_device *pdev)
 
 	platform_set_drvdata(pdev, qmp);
 
+#if IS_ENABLED(CONFIG_DEBUG_FS)
+	qmp->debugfs_file = debugfs_create_file("aoss_send_message", 0220, NULL,
+						qmp, &aoss_dbg_fops);
+#endif /* CONFIG_DEBUG_FS */
+
 	return 0;
 
 err_close_qmp:
@@ -535,6 +589,10 @@ err_free_mbox:
 static int qmp_remove(struct platform_device *pdev)
 {
 	struct qmp *qmp = platform_get_drvdata(pdev);
+
+#if IS_ENABLED(CONFIG_DEBUG_FS)
+	debugfs_remove(qmp->debugfs_file);
+#endif /* CONFIG_DEBUG_FS */
 
 	qmp_qdss_clk_remove(qmp);
 	qmp_cooling_devices_remove(qmp);

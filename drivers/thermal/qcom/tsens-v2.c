@@ -2,6 +2,7 @@
 /*
  * Copyright (c) 2015, The Linux Foundation. All rights reserved.
  * Copyright (c) 2018, Linaro Limited
+ * Copyright (c) 2023-2024, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/bitops.h>
@@ -24,16 +25,34 @@
 #define TM_Sn_CRITICAL_THRESHOLD_OFF	0x0060
 #define TM_Sn_STATUS_OFF		0x00a0
 #define TM_TRDY_OFF			0x00e4
-#define TM_WDOG_LOG_OFF		0x013c
+#define TM_WDOG_LOG_OFF			0x013c
+#define TM_PERSIST_CTRL			0x0148
+#define TM_PERSIST_MAX_STATUS		0x014c
+#define TM_PERSIST_MIN_STATUS		0x0150
+#define TM_COLD_INT_STATUS_OFF		0x00e0
 
 /* v2.x: 8996, 8998, sdm845 */
 
 static struct tsens_features tsens_v2_feat = {
 	.ver_major	= VER_2_X,
 	.crit_int	= 1,
+	.combo_int	= 0,
 	.adc		= 0,
 	.srot_split	= 1,
 	.max_sensors	= 16,
+	.trip_min_temp	= -40000,
+	.trip_max_temp	= 204000,
+};
+
+static struct tsens_features ipq8074_feat = {
+	.ver_major	= VER_2_X,
+	.crit_int	= 1,
+	.combo_int	= 1,
+	.adc		= 0,
+	.srot_split	= 1,
+	.max_sensors	= 16,
+	.trip_min_temp	= 0,
+	.trip_max_temp	= 204000,
 };
 
 static const struct reg_field tsens_v2_regfields[MAX_REGFIELDS] = {
@@ -75,6 +94,13 @@ static const struct reg_field tsens_v2_regfields[MAX_REGFIELDS] = {
 	[CC_MON_CLEAR]     = REG_FIELD(TM_CRITICAL_INT_CLEAR_OFF,  30, 30),
 	[CC_MON_MASK]      = REG_FIELD(TM_CRITICAL_INT_MASK_OFF,   30, 30),
 	[WDOG_BARK_COUNT]  = REG_FIELD(TM_WDOG_LOG_OFF,             0,  7),
+	[TEMP_PERSIST_CTRL] = REG_FIELD(TM_PERSIST_CTRL,            0,  1),
+	[TEMP_PERSIST_MAX_VALID] = REG_FIELD(TM_PERSIST_MAX_STATUS,     20,  20),
+	[TEMP_PERSIST_MAX_SENSOR_ID] = REG_FIELD(TM_PERSIST_MAX_STATUS, 16,  19),
+	[TEMP_PERSIST_MAX_TEMP] = REG_FIELD(TM_PERSIST_MAX_STATUS,      0,   15),
+	[TEMP_PERSIST_MIN_VALID] = REG_FIELD(TM_PERSIST_MIN_STATUS,     20,  20),
+	[TEMP_PERSIST_MIN_SENSOR_ID] = REG_FIELD(TM_PERSIST_MIN_STATUS, 16,  19),
+	[TEMP_PERSIST_MIN_TEMP] = REG_FIELD(TM_PERSIST_MIN_STATUS,      0,   15),
 
 	/* Sn_STATUS */
 	REG_FIELD_FOR_EACH_SENSOR16(LAST_TEMP,       TM_Sn_STATUS_OFF,  0,  11),
@@ -86,6 +112,8 @@ static const struct reg_field tsens_v2_regfields[MAX_REGFIELDS] = {
 	REG_FIELD_FOR_EACH_SENSOR16(CRITICAL_STATUS, TM_Sn_STATUS_OFF, 19,  19),
 	REG_FIELD_FOR_EACH_SENSOR16(MAX_STATUS,      TM_Sn_STATUS_OFF, 20,  20),
 
+	/* COLD INTERRUPT STATUS */
+	[COLD_STATUS] = REG_FIELD(TM_COLD_INT_STATUS_OFF, 0, 0),
 	/* TRDY: 1=ready, 0=in progress */
 	[TRDY] = REG_FIELD(TM_TRDY_OFF, 0, 0),
 };
@@ -93,11 +121,18 @@ static const struct reg_field tsens_v2_regfields[MAX_REGFIELDS] = {
 static const struct tsens_ops ops_generic_v2 = {
 	.init		= init_common,
 	.get_temp	= get_temp_tsens_valid,
+	.get_cold_status  = get_cold_int_status,
 };
 
 struct tsens_plat_data data_tsens_v2 = {
 	.ops		= &ops_generic_v2,
 	.feat		= &tsens_v2_feat,
+	.fields	= tsens_v2_regfields,
+};
+
+struct tsens_plat_data data_ipq8074 = {
+	.ops		= &ops_generic_v2,
+	.feat		= &ipq8074_feat,
 	.fields	= tsens_v2_regfields,
 };
 

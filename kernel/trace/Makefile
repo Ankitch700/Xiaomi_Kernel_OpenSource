@@ -99,12 +99,19 @@ obj-$(CONFIG_KGDB_KDB) += trace_kdb.o
 endif
 obj-$(CONFIG_DYNAMIC_EVENTS) += trace_dynevent.o
 obj-$(CONFIG_PROBE_EVENTS) += trace_probe.o
+obj-$(CONFIG_PROBE_EVENTS_BTF_ARGS) += trace_btf.o
 obj-$(CONFIG_UPROBE_EVENTS) += trace_uprobe.o
 obj-$(CONFIG_BOOTTIME_TRACING) += trace_boot.o
 obj-$(CONFIG_FTRACE_RECORD_RECURSION) += trace_recursion_record.o
 obj-$(CONFIG_FPROBE) += fprobe.o
 obj-$(CONFIG_RETHOOK) += rethook.o
+obj-$(CONFIG_FPROBE_EVENTS) += trace_fprobe.o
 
 obj-$(CONFIG_TRACEPOINT_BENCHMARK) += trace_benchmark.o
+obj-$(CONFIG_RV) += rv/
+
+obj-$(CONFIG_IPC_LOGGING) += qcom_ipc_logging.o
+qcom_ipc_logging-y := ipc_logging.o  ipc_logging_debug.o
+qcom_ipc_logging-$(CONFIG_IPC_LOGGING_CDEV) += ipc_logging_cdev.o
 
 libftrace-y := ftrace.o

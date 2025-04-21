@@ -13,10 +13,10 @@
 #include <linux/delay.h>
 #include <linux/err.h>
 #include <linux/gpio.h>
+#include <linux/gpio/consumer.h>
 #include <linux/interrupt.h>
 #include <linux/mfd/syscon.h>
-#include <linux/of_address.h>
-#include <linux/of_device.h>
+#include <linux/of.h>
 #include <linux/of_gpio.h>
 #include <linux/of_pci.h>
 #include <linux/phy/phy.h>
@@ -366,12 +366,11 @@ static int kirin_pcie_get_gpio_enable(struct kirin_pcie *pcie,
 				      struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
-	struct device_node *np = dev->of_node;
 	char name[32];
 	int ret, i;
 
 	/* This is an optional property */
-	ret = of_gpio_named_count(np, "hisilicon,clken-gpios");
+	ret = gpiod_count(dev, "hisilicon,clken");
 	if (ret < 0)
 		return 0;
 
@@ -620,7 +619,7 @@ static int kirin_pcie_start_link(struct dw_pcie *pci)
 	return 0;
 }
 
-static int kirin_pcie_host_init(struct pcie_port *pp)
+static int kirin_pcie_host_init(struct dw_pcie_rp *pp)
 {
 	pp->bridge->ops = &kirin_pci_ops;
 
@@ -742,7 +741,7 @@ err:
 	return ret;
 }
 
-static int __exit kirin_pcie_remove(struct platform_device *pdev)
+static int kirin_pcie_remove(struct platform_device *pdev)
 {
 	struct kirin_pcie *kirin_pcie = platform_get_drvdata(pdev);
 
@@ -819,7 +818,7 @@ static int kirin_pcie_probe(struct platform_device *pdev)
 
 static struct platform_driver kirin_pcie_driver = {
 	.probe			= kirin_pcie_probe,
-	.remove	        	= __exit_p(kirin_pcie_remove),
+	.remove	        	= kirin_pcie_remove,
 	.driver			= {
 		.name			= "kirin-pcie",
 		.of_match_table		= kirin_pcie_match,

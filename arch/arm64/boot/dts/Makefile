@@ -19,6 +19,7 @@ subdir-y += lg
 subdir-y += marvell
 subdir-y += mediatek
 subdir-y += microchip
+subdir-y += nuvoton
 subdir-y += nvidia
 subdir-y += qcom
 subdir-y += realtek
@@ -26,8 +27,15 @@ subdir-y += renesas
 subdir-y += rockchip
 subdir-y += socionext
 subdir-y += sprd
+subdir-y += st
 subdir-y += synaptics
 subdir-y += tesla
 subdir-y += ti
 subdir-y += toshiba
 subdir-y += xilinx
+
+dtstree := $(srctree)/$(src)
+vendor  := $(dtstree)/vendor
+ifneq "$(wildcard $(vendor)/Makefile)" ""
+	subdir-y += vendor
+endif

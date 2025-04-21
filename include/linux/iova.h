@@ -13,6 +13,7 @@
 #include <linux/kernel.h>
 #include <linux/rbtree.h>
 #include <linux/dma-mapping.h>
+#include <linux/android_vendor.h>
 
 /* iova structure */
 struct iova {
@@ -38,6 +39,11 @@ struct iova_domain {
 
 	struct iova_rcache	*rcaches;
 	struct hlist_node	cpuhp_dead;
+
+	ANDROID_VENDOR_DATA(1);
+#if IS_ENABLED(CONFIG_QTVM_IOMMU_TRACE_HOOKS) && !defined(CONFIG_ANDROID_VENDOR_OEM_DATA)
+	u64 android_vendor_data1;
+#endif
 };
 
 static inline unsigned long iova_size(struct iova *iova)
@@ -75,9 +81,11 @@ static inline unsigned long iova_pfn(struct iova_domain *iovad, dma_addr_t iova)
 	return iova >> iova_shift(iovad);
 }
 
-#if IS_ENABLED(CONFIG_IOMMU_IOVA)
+#if IS_REACHABLE(CONFIG_IOMMU_IOVA)
 int iova_cache_get(void);
 void iova_cache_put(void);
+
+unsigned long iova_rcache_range(void);
 
 void free_iova(struct iova_domain *iovad, unsigned long pfn);
 void __free_iova(struct iova_domain *iovad, struct iova *iova);

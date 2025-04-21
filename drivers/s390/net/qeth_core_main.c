@@ -763,6 +763,49 @@ static void qeth_issue_ipa_msg(struct qeth_ipa_cmd *cmd, int rc,
 				 ipa_name, com, CARD_DEVID(card));
 }
 
+static void qeth_default_link_info(struct qeth_card *card)
+{
+	struct qeth_link_info *link_info = &card->info.link_info;
+
+	QETH_CARD_TEXT(card, 2, "dftlinfo");
+	link_info->duplex = DUPLEX_FULL;
+
+	if (IS_IQD(card) || IS_VM_NIC(card)) {
+		link_info->speed = SPEED_10000;
+		link_info->port = PORT_FIBRE;
+		link_info->link_mode = QETH_LINK_MODE_FIBRE_SHORT;
+	} else {
+		switch (card->info.link_type) {
+		case QETH_LINK_TYPE_FAST_ETH:
+		case QETH_LINK_TYPE_LANE_ETH100:
+			link_info->speed = SPEED_100;
+			link_info->port = PORT_TP;
+			break;
+		case QETH_LINK_TYPE_GBIT_ETH:
+		case QETH_LINK_TYPE_LANE_ETH1000:
+			link_info->speed = SPEED_1000;
+			link_info->port = PORT_FIBRE;
+			break;
+		case QETH_LINK_TYPE_10GBIT_ETH:
+			link_info->speed = SPEED_10000;
+			link_info->port = PORT_FIBRE;
+			break;
+		case QETH_LINK_TYPE_25GBIT_ETH:
+			link_info->speed = SPEED_25000;
+			link_info->port = PORT_FIBRE;
+			break;
+		default:
+			dev_info(&card->gdev->dev,
+				 "Unknown link type %x\n",
+				 card->info.link_type);
+			link_info->speed = SPEED_UNKNOWN;
+			link_info->port = PORT_OTHER;
+		}
+
+		link_info->link_mode = QETH_LINK_MODE_UNKNOWN;
+	}
+}
+
 static struct qeth_ipa_cmd *qeth_check_ipa_data(struct qeth_card *card,
 						struct qeth_ipa_cmd *cmd)
 {
@@ -790,6 +833,7 @@ static struct qeth_ipa_cmd *qeth_check_ipa_data(struct qeth_card *card,
 				 netdev_name(card->dev), card->info.chpid);
 			qeth_issue_ipa_msg(cmd, cmd->hdr.return_code, card);
 			netif_carrier_off(card->dev);
+			qeth_default_link_info(card);
 		}
 		return NULL;
 	case IPA_CMD_STARTLAN:
@@ -1135,6 +1179,20 @@ static int qeth_check_irb_error(struct qeth_card *card, struct ccw_device *cdev,
 	}
 }
 
+/**
+ * qeth_irq() - qeth interrupt handler
+ * @cdev: ccw device
+ * @intparm: expect pointer to iob
+ * @irb: Interruption Response Block
+ *
+ * In the good path:
+ * corresponding qeth channel is locked with last used iob as active_cmd.
+ * But this function is also called for error interrupts.
+ *
+ * Caller ensures that:
+ * Interrupts are disabled; ccw device lock is held;
+ *
+ */
 static void qeth_irq(struct ccw_device *cdev, unsigned long intparm,
 		struct irb *irb)
 {
@@ -1176,11 +1234,10 @@ static void qeth_irq(struct ccw_device *cdev, unsigned long intparm,
 		iob = (struct qeth_cmd_buffer *) (addr_t)intparm;
 	}
 
-	qeth_unlock_channel(card, channel);
-
 	rc = qeth_check_irb_error(card, cdev, irb);
 	if (rc) {
 		/* IO was terminated, free its resources. */
+		qeth_unlock_channel(card, channel);
 		if (iob)
 			qeth_cancel_cmd(iob, rc);
 		return;
@@ -1224,6 +1281,7 @@ static void qeth_irq(struct ccw_device *cdev, unsigned long intparm,
 		rc = qeth_get_problem(card, cdev, irb);
 		if (rc) {
 			card->read_or_write_problem = 1;
+			qeth_unlock_channel(card, channel);
 			if (iob)
 				qeth_cancel_cmd(iob, rc);
 			qeth_clear_ipacmd_list(card);
@@ -1231,6 +1289,26 @@ static void qeth_irq(struct ccw_device *cdev, unsigned long intparm,
 			return;
 		}
 	}
+
+	if (scsw_cmd_is_valid_cc(&irb->scsw) && irb->scsw.cmd.cc == 1 && iob) {
+		/* channel command hasn't started: retry.
+		 * active_cmd is still set to last iob
+		 */
+		QETH_CARD_TEXT(card, 2, "irqcc1");
+		rc = ccw_device_start_timeout(cdev, __ccw_from_cmd(iob),
+					      (addr_t)iob, 0, 0, iob->timeout);
+		if (rc) {
+			QETH_DBF_MESSAGE(2,
+					 "ccw retry on %x failed, rc = %i\n",
+					 CARD_DEVID(card), rc);
+			QETH_CARD_TEXT_(card, 2, " err%d", rc);
+			qeth_unlock_channel(card, channel);
+			qeth_cancel_cmd(iob, rc);
+		}
+		return;
+	}
+
+	qeth_unlock_channel(card, channel);
 
 	if (iob) {
 		/* sanity check: */
@@ -2757,9 +2835,11 @@ static void qeth_print_status_message(struct qeth_card *card)
 		 * of the level OSA sets the first character to zero
 		 * */
 		if (!card->info.mcl_level[0]) {
-			sprintf(card->info.mcl_level, "%02x%02x",
-				card->info.mcl_level[2],
-				card->info.mcl_level[3]);
+			scnprintf(card->info.mcl_level,
+				  sizeof(card->info.mcl_level),
+				  "%02x%02x",
+				  card->info.mcl_level[2],
+				  card->info.mcl_level[3]);
 			break;
 		}
 		fallthrough;
@@ -3565,7 +3645,7 @@ static void qeth_flush_buffers(struct qeth_qdio_out_q *queue, int index,
 			if (!atomic_read(&queue->set_pci_flags_count)) {
 				/*
 				 * there's no outstanding PCI any more, so we
-				 * have to request a PCI to be sure the the PCI
+				 * have to request a PCI to be sure the PCI
 				 * will wake at some time in the future then we
 				 * can flush packed buffers that might still be
 				 * hanging around, which can happen if no
@@ -4744,92 +4824,6 @@ out_free:
 	return rc;
 }
 
-static int qeth_query_card_info_cb(struct qeth_card *card,
-				   struct qeth_reply *reply, unsigned long data)
-{
-	struct qeth_ipa_cmd *cmd = (struct qeth_ipa_cmd *)data;
-	struct qeth_link_info *link_info = reply->param;
-	struct qeth_query_card_info *card_info;
-
-	QETH_CARD_TEXT(card, 2, "qcrdincb");
-	if (qeth_setadpparms_inspect_rc(cmd))
-		return -EIO;
-
-	card_info = &cmd->data.setadapterparms.data.card_info;
-	netdev_dbg(card->dev,
-		   "card info: card_type=0x%02x, port_mode=0x%04x, port_speed=0x%08x\n",
-		   card_info->card_type, card_info->port_mode,
-		   card_info->port_speed);
-
-	switch (card_info->port_mode) {
-	case CARD_INFO_PORTM_FULLDUPLEX:
-		link_info->duplex = DUPLEX_FULL;
-		break;
-	case CARD_INFO_PORTM_HALFDUPLEX:
-		link_info->duplex = DUPLEX_HALF;
-		break;
-	default:
-		link_info->duplex = DUPLEX_UNKNOWN;
-	}
-
-	switch (card_info->card_type) {
-	case CARD_INFO_TYPE_1G_COPPER_A:
-	case CARD_INFO_TYPE_1G_COPPER_B:
-		link_info->speed = SPEED_1000;
-		link_info->port = PORT_TP;
-		break;
-	case CARD_INFO_TYPE_1G_FIBRE_A:
-	case CARD_INFO_TYPE_1G_FIBRE_B:
-		link_info->speed = SPEED_1000;
-		link_info->port = PORT_FIBRE;
-		break;
-	case CARD_INFO_TYPE_10G_FIBRE_A:
-	case CARD_INFO_TYPE_10G_FIBRE_B:
-		link_info->speed = SPEED_10000;
-		link_info->port = PORT_FIBRE;
-		break;
-	default:
-		switch (card_info->port_speed) {
-		case CARD_INFO_PORTS_10M:
-			link_info->speed = SPEED_10;
-			break;
-		case CARD_INFO_PORTS_100M:
-			link_info->speed = SPEED_100;
-			break;
-		case CARD_INFO_PORTS_1G:
-			link_info->speed = SPEED_1000;
-			break;
-		case CARD_INFO_PORTS_10G:
-			link_info->speed = SPEED_10000;
-			break;
-		case CARD_INFO_PORTS_25G:
-			link_info->speed = SPEED_25000;
-			break;
-		default:
-			link_info->speed = SPEED_UNKNOWN;
-		}
-
-		link_info->port = PORT_OTHER;
-	}
-
-	return 0;
-}
-
-int qeth_query_card_info(struct qeth_card *card,
-			 struct qeth_link_info *link_info)
-{
-	struct qeth_cmd_buffer *iob;
-
-	QETH_CARD_TEXT(card, 2, "qcrdinfo");
-	if (!qeth_adp_supported(card, IPA_SETADP_QUERY_CARD_INFO))
-		return -EOPNOTSUPP;
-	iob = qeth_get_adapter_cmd(card, IPA_SETADP_QUERY_CARD_INFO, 0);
-	if (!iob)
-		return -ENOMEM;
-
-	return qeth_send_ipa_cmd(card, iob, qeth_query_card_info_cb, link_info);
-}
-
 static int qeth_init_link_info_oat_cb(struct qeth_card *card,
 				      struct qeth_reply *reply_priv,
 				      unsigned long data)
@@ -4839,6 +4833,7 @@ static int qeth_init_link_info_oat_cb(struct qeth_card *card,
 	struct qeth_query_oat_physical_if *phys_if;
 	struct qeth_query_oat_reply *reply;
 
+	QETH_CARD_TEXT(card, 2, "qoatincb");
 	if (qeth_setadpparms_inspect_rc(cmd))
 		return -EIO;
 
@@ -4918,41 +4913,7 @@ static int qeth_init_link_info_oat_cb(struct qeth_card *card,
 
 static void qeth_init_link_info(struct qeth_card *card)
 {
-	card->info.link_info.duplex = DUPLEX_FULL;
-
-	if (IS_IQD(card) || IS_VM_NIC(card)) {
-		card->info.link_info.speed = SPEED_10000;
-		card->info.link_info.port = PORT_FIBRE;
-		card->info.link_info.link_mode = QETH_LINK_MODE_FIBRE_SHORT;
-	} else {
-		switch (card->info.link_type) {
-		case QETH_LINK_TYPE_FAST_ETH:
-		case QETH_LINK_TYPE_LANE_ETH100:
-			card->info.link_info.speed = SPEED_100;
-			card->info.link_info.port = PORT_TP;
-			break;
-		case QETH_LINK_TYPE_GBIT_ETH:
-		case QETH_LINK_TYPE_LANE_ETH1000:
-			card->info.link_info.speed = SPEED_1000;
-			card->info.link_info.port = PORT_FIBRE;
-			break;
-		case QETH_LINK_TYPE_10GBIT_ETH:
-			card->info.link_info.speed = SPEED_10000;
-			card->info.link_info.port = PORT_FIBRE;
-			break;
-		case QETH_LINK_TYPE_25GBIT_ETH:
-			card->info.link_info.speed = SPEED_25000;
-			card->info.link_info.port = PORT_FIBRE;
-			break;
-		default:
-			dev_info(&card->gdev->dev, "Unknown link type %x\n",
-				 card->info.link_type);
-			card->info.link_info.speed = SPEED_UNKNOWN;
-			card->info.link_info.port = PORT_OTHER;
-		}
-
-		card->info.link_info.link_mode = QETH_LINK_MODE_UNKNOWN;
-	}
+	qeth_default_link_info(card);
 
 	/* Get more accurate data via QUERY OAT: */
 	if (qeth_adp_supported(card, IPA_SETADP_QUERY_OAT)) {
@@ -5446,8 +5407,6 @@ int qeth_set_offline(struct qeth_card *card, const struct qeth_discipline *disc,
 	qeth_clear_ipacmd_list(card);
 
 	rtnl_lock();
-	card->info.open_when_online = card->dev->flags & IFF_UP;
-	dev_close(card->dev);
 	netif_device_detach(card->dev);
 	netif_carrier_off(card->dev);
 	rtnl_unlock();
@@ -5461,6 +5420,7 @@ int qeth_set_offline(struct qeth_card *card, const struct qeth_discipline *disc,
 	qeth_clear_working_pool_list(card);
 	qeth_flush_local_addrs(card);
 	card->info.promisc_mode = 0;
+	qeth_default_link_info(card);
 
 	rc  = qeth_stop_channel(&card->data);
 	rc2 = qeth_stop_channel(&card->write);
@@ -6164,7 +6124,7 @@ void qeth_dbf_longtext(debug_info_t *id, int level, char *fmt, ...)
 	if (!debug_level_enabled(id, level))
 		return;
 	va_start(args, fmt);
-	vsnprintf(dbf_txt_buf, sizeof(dbf_txt_buf), fmt, args);
+	vscnprintf(dbf_txt_buf, sizeof(dbf_txt_buf), fmt, args);
 	va_end(args);
 	debug_text_event(id, level, dbf_txt_buf);
 }
@@ -6404,8 +6364,8 @@ static int qeth_core_probe_device(struct ccwgroup_device *gdev)
 		goto err_dev;
 	}
 
-	snprintf(dbf_name, sizeof(dbf_name), "qeth_card_%s",
-		dev_name(&gdev->dev));
+	scnprintf(dbf_name, sizeof(dbf_name), "qeth_card_%s",
+		  dev_name(&gdev->dev));
 	card->debug = qeth_get_dbf_entry(dbf_name);
 	if (!card->debug) {
 		rc = qeth_add_dbf_entry(card, dbf_name);

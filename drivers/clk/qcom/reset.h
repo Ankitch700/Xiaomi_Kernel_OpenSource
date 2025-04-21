@@ -11,6 +11,8 @@
 struct qcom_reset_map {
 	unsigned int reg;
 	u8 bit;
+	u8 udelay;
+	u32 bitmask;
 };
 
 struct regmap;
@@ -19,6 +21,7 @@ struct qcom_reset_controller {
 	const struct qcom_reset_map *reset_map;
 	struct regmap *regmap;
 	struct reset_controller_dev rcdev;
+	struct device *dev;
 };
 
 #define to_qcom_reset_controller(r) \

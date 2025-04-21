@@ -29,24 +29,34 @@ struct qcom_q6v5 {
 	int handover_irq;
 	int stop_irq;
 
+	struct rproc_subdev *ssr_subdev;
+
+	struct work_struct crash_handler;
+
 	bool handover_issued;
 
 	struct completion start_done;
 	struct completion stop_done;
 
 	int crash_reason;
+	int crash_stack;
+	unsigned int smem_host_id;
 
 	bool running;
 
 	const char *load_state;
 	void (*handover)(struct qcom_q6v5 *q6v5);
+	unsigned long long seq;
+	unsigned long long crash_seq;
 };
 
 int qcom_q6v5_init(struct qcom_q6v5 *q6v5, struct platform_device *pdev,
-		   struct rproc *rproc, int crash_reason, const char *load_state,
+		   struct rproc *rproc, int crash_reason, int crash_stack,
+		   unsigned int smem_host_id, const char *load_state,
 		   void (*handover)(struct qcom_q6v5 *q6v5));
 void qcom_q6v5_deinit(struct qcom_q6v5 *q6v5);
 
+void qcom_q6v5_register_ssr_subdev(struct qcom_q6v5 *q6v5, struct rproc_subdev *ssr_subdev);
 int qcom_q6v5_prepare(struct qcom_q6v5 *q6v5);
 int qcom_q6v5_unprepare(struct qcom_q6v5 *q6v5);
 int qcom_q6v5_request_stop(struct qcom_q6v5 *q6v5, struct qcom_sysmon *sysmon);

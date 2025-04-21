@@ -27,6 +27,7 @@
 
 #include <drm/drm_atomic_helper.h>
 #include <drm/drm_damage_helper.h>
+#include <drm/drm_edid.h>
 #include <drm/drm_fourcc.h>
 #include <drm/drm_gem_framebuffer_helper.h>
 #include <drm/drm_probe_helper.h>
@@ -300,10 +301,6 @@ virtio_gpu_user_framebuffer_create(struct drm_device *dev,
 	struct virtio_gpu_framebuffer *virtio_gpu_fb;
 	int ret;
 
-	if (mode_cmd->pixel_format != DRM_FORMAT_HOST_XRGB8888 &&
-	    mode_cmd->pixel_format != DRM_FORMAT_HOST_ARGB8888)
-		return ERR_PTR(-ENOENT);
-
 	/* lookup object associated with res handle */
 	obj = drm_gem_object_lookup(file_priv, mode_cmd->handles[0]);
 	if (!obj)
@@ -335,11 +332,13 @@ int virtio_gpu_modeset_init(struct virtio_gpu_device *vgdev)
 {
 	int i, ret;
 
+	if (!vgdev->num_scanouts)
+		return 0;
+
 	ret = drmm_mode_config_init(vgdev->ddev);
 	if (ret)
 		return ret;
 
-	vgdev->ddev->mode_config.quirk_addfb_prefer_host_byte_order = true;
 	vgdev->ddev->mode_config.funcs = &virtio_gpu_mode_funcs;
 
 	/* modes will be validated against the framebuffer size */
@@ -347,6 +346,8 @@ int virtio_gpu_modeset_init(struct virtio_gpu_device *vgdev)
 	vgdev->ddev->mode_config.min_height = YRES_MIN;
 	vgdev->ddev->mode_config.max_width = XRES_MAX;
 	vgdev->ddev->mode_config.max_height = YRES_MAX;
+
+	vgdev->ddev->mode_config.fb_modifiers_not_supported = true;
 
 	for (i = 0 ; i < vgdev->num_scanouts; ++i)
 		vgdev_output_init(vgdev, i);
@@ -358,6 +359,9 @@ int virtio_gpu_modeset_init(struct virtio_gpu_device *vgdev)
 void virtio_gpu_modeset_fini(struct virtio_gpu_device *vgdev)
 {
 	int i;
+
+	if (!vgdev->num_scanouts)
+		return;
 
 	for (i = 0 ; i < vgdev->num_scanouts; ++i)
 		kfree(vgdev->outputs[i].edid);

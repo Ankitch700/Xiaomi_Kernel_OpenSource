@@ -6,7 +6,6 @@
 menuconfig MD
 	bool "Multiple devices driver support (RAID and LVM)"
 	depends on BLOCK
-	select SRCU
 	help
 	  Support multiple physical spindles through a single logical device.
 	  Required for RAID and logical volume management.
@@ -16,6 +15,11 @@ if MD
 config BLK_DEV_MD
 	tristate "RAID support"
 	select BLOCK_HOLDER_DEPRECATED if SYSFS
+	select BUFFER_HEAD
+	# BLOCK_LEGACY_AUTOLOAD requirement should be removed
+	# after relevant mdadm enhancements - to make "names=yes"
+	# the default - are widely available.
+	select BLOCK_LEGACY_AUTOLOAD
 	help
 	  This driver lets you combine several hard disk partitions into one
 	  logical block device. This can be used to simply append one
@@ -46,6 +50,16 @@ config MD_AUTODETECT
 	  synchronisation steps that are part of this step.
 
 	  If unsure, say Y.
+
+config MD_BITMAP_FILE
+	bool "MD bitmap file support (deprecated)"
+	default y
+	help
+	  If you say Y here, support for write intent bitmaps in files on an
+	  external file system is enabled.  This is an alternative to the internal
+	  bitmaps near the MD superblock, and very problematic code that abuses
+	  various kernel APIs and can only work with files on a file system not
+	  actually sitting on the MD device.
 
 config MD_LINEAR
 	tristate "Linear (append) mode (deprecated)"
@@ -290,6 +304,27 @@ config DM_CRYPT
 
 	  If unsure, say N.
 
+config DM_DEFAULT_KEY
+	tristate "Default-key target support"
+	depends on BLK_DEV_DM
+	depends on BLK_INLINE_ENCRYPTION
+	# dm-default-key doesn't require -o inlinecrypt, but it does currently
+	# rely on the inline encryption hooks being built into the kernel.
+	depends on FS_ENCRYPTION_INLINE_CRYPT
+	help
+	  This device-mapper target allows you to create a device that
+	  assigns a default encryption key to bios that aren't for the
+	  contents of an encrypted file.
+
+	  This ensures that all blocks on-disk will be encrypted with
+	  some key, without the performance hit of file contents being
+	  encrypted twice when fscrypt (File-Based Encryption) is used.
+
+	  It is only appropriate to use dm-default-key when key
+	  configuration is tightly controlled, like it is in Android,
+	  such that all fscrypt keys are at least as hard to compromise
+	  as the default key.
+
 config DM_SNAPSHOT
        tristate "Snapshot target"
        depends on BLK_DEV_DM
@@ -506,6 +541,15 @@ config DM_INIT
 
 	If unsure, say N.
 
+config DM_VERITY_SIG_VALUE
+	bool "DM \"root_hash_sig_key_value\" parameter support"
+	depends on DM_INIT=y
+	help
+	Enable "root_hash_sig_key_value" parameter in "dm-mod.create=" to create
+	mapped devices at init time. The option is used to directly pass root hash
+	signature value from kernel command line. So root hash signature
+	verification can be enabled without initramfs.
+
 config DM_UEVENT
 	bool "DM uevents"
 	depends on BLK_DEV_DM
@@ -646,11 +690,26 @@ config DM_ZONED
 
 config DM_AUDIT
 	bool "DM audit events"
+	depends on BLK_DEV_DM
 	depends on AUDIT
 	help
 	  Generate audit events for device-mapper.
 
 	  Enables audit logging of several security relevant events in the
 	  particular device-mapper targets, especially the integrity target.
+
+config DM_USER
+	tristate "Block device in userspace"
+	depends on BLK_DEV_DM
+	default y
+	help
+	  This device-mapper target allows a userspace daemon to provide the
+	  contents of a block device.  See
+	  <file:Documentation/block/dm-user.rst> for more information.
+
+	  To compile this code as a module, choose M here: the module will be
+	  called dm-user.
+
+	  If unsure, say N.
 
 endif # MD

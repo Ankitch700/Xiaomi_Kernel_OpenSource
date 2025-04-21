@@ -38,15 +38,17 @@ static int dpaa2_qdma_alloc_chan_resources(struct dma_chan *chan)
 	if (!dpaa2_chan->fd_pool)
 		goto err;
 
-	dpaa2_chan->fl_pool = dma_pool_create("fl_pool", dev,
-					      sizeof(struct dpaa2_fl_entry),
-					      sizeof(struct dpaa2_fl_entry), 0);
+	dpaa2_chan->fl_pool =
+		dma_pool_create("fl_pool", dev,
+				 sizeof(struct dpaa2_fl_entry) * 3,
+				 sizeof(struct dpaa2_fl_entry), 0);
+
 	if (!dpaa2_chan->fl_pool)
 		goto err_fd;
 
 	dpaa2_chan->sdd_pool =
 		dma_pool_create("sdd_pool", dev,
-				sizeof(struct dpaa2_qdma_sd_d),
+				sizeof(struct dpaa2_qdma_sd_d) * 2,
 				sizeof(struct dpaa2_qdma_sd_d), 0);
 	if (!dpaa2_chan->sdd_pool)
 		goto err_fl;
@@ -765,7 +767,7 @@ err_mcportal:
 	return err;
 }
 
-static int dpaa2_qdma_remove(struct fsl_mc_device *ls_dev)
+static void dpaa2_qdma_remove(struct fsl_mc_device *ls_dev)
 {
 	struct dpaa2_qdma_engine *dpaa2_qdma;
 	struct dpaa2_qdma_priv *priv;
@@ -787,8 +789,6 @@ static int dpaa2_qdma_remove(struct fsl_mc_device *ls_dev)
 	dma_async_device_unregister(&dpaa2_qdma->dma_dev);
 	kfree(priv);
 	kfree(dpaa2_qdma);
-
-	return 0;
 }
 
 static void dpaa2_qdma_shutdown(struct fsl_mc_device *ls_dev)

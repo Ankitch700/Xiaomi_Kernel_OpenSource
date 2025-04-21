@@ -151,20 +151,13 @@ extern bool mempolicy_in_oom_domain(struct task_struct *tsk,
 				const nodemask_t *mask);
 extern nodemask_t *policy_nodemask(gfp_t gfp, struct mempolicy *policy);
 
-static inline nodemask_t *policy_nodemask_current(gfp_t gfp)
-{
-	struct mempolicy *mpol = get_task_policy(current);
-
-	return policy_nodemask(gfp, mpol);
-}
-
 extern unsigned int mempolicy_slab_node(void);
 
 extern enum zone_type policy_zone;
 
 static inline void check_highest_zone(enum zone_type k)
 {
-	if (k > policy_zone && k != ZONE_MOVABLE)
+	if (k > policy_zone && !zid_is_virt(k))
 		policy_zone = k;
 }
 
@@ -181,7 +174,7 @@ extern void mpol_to_str(char *buffer, int maxlen, struct mempolicy *pol);
 /* Check if a vma is migratable */
 extern bool vma_migratable(struct vm_area_struct *vma);
 
-extern int mpol_misplaced(struct page *, struct vm_area_struct *, unsigned long);
+int mpol_misplaced(struct folio *, struct vm_area_struct *, unsigned long);
 extern void mpol_put_task_policy(struct task_struct *);
 
 static inline bool mpol_is_preferred_many(struct mempolicy *pol)
@@ -189,6 +182,7 @@ static inline bool mpol_is_preferred_many(struct mempolicy *pol)
 	return  (pol->mode == MPOL_PREFERRED_MANY);
 }
 
+extern bool apply_policy_zone(struct mempolicy *policy, enum zone_type zone);
 
 #else
 
@@ -284,7 +278,8 @@ static inline int mpol_parse_str(char *str, struct mempolicy **mpol)
 }
 #endif
 
-static inline int mpol_misplaced(struct page *page, struct vm_area_struct *vma,
+static inline int mpol_misplaced(struct folio *folio,
+				 struct vm_area_struct *vma,
 				 unsigned long address)
 {
 	return -1; /* no node preference */
@@ -292,11 +287,6 @@ static inline int mpol_misplaced(struct page *page, struct vm_area_struct *vma,
 
 static inline void mpol_put_task_policy(struct task_struct *task)
 {
-}
-
-static inline nodemask_t *policy_nodemask_current(gfp_t gfp)
-{
-	return NULL;
 }
 
 static inline bool mpol_is_preferred_many(struct mempolicy *pol)

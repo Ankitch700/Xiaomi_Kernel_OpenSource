@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0 */
 /*
- * Copyright (c) 2018-2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2018-2021, The Linux Foundation. All rights reserved.
  *
  */
 #ifndef _MHI_H_
@@ -14,6 +14,9 @@
 #include <linux/spinlock.h>
 #include <linux/wait.h>
 #include <linux/workqueue.h>
+
+/* MHI client drivers to set this upper bound for tx buffer */
+#define MHI_MAX_MTU 0xffff
 
 #define MHI_MAX_OEM_PK_HASH_SEGMENTS 16
 
@@ -34,6 +37,8 @@ struct mhi_buf_info;
  * @MHI_CB_SYS_ERROR: MHI device entered error state (may recover)
  * @MHI_CB_FATAL_ERROR: MHI device entered fatal error state
  * @MHI_CB_BW_REQ: Received a bandwidth switch request from device
+ * @MHI_CB_DTR_SIGNAL: DTR signaling update
+ * @MHI_CB_DTR_START_CHANNELS: DTR signal for client driver to start channels
  */
 enum mhi_callback {
 	MHI_CB_IDLE,
@@ -45,6 +50,8 @@ enum mhi_callback {
 	MHI_CB_SYS_ERROR,
 	MHI_CB_FATAL_ERROR,
 	MHI_CB_BW_REQ,
+	MHI_CB_DTR_SIGNAL,
+	MHI_CB_DTR_START_CHANNELS,
 };
 
 /**
@@ -102,10 +109,12 @@ struct image_info {
  * struct mhi_link_info - BW requirement
  * target_link_speed - Link speed as defined by TLS bits in LinkControl reg
  * target_link_width - Link width as defined by NLW bits in LinkStatus reg
+ * sequence_num - used by device to track bw requests sent to host
  */
 struct mhi_link_info {
 	unsigned int target_link_speed;
 	unsigned int target_link_width;
+	int sequence_num;
 };
 
 /**
@@ -183,10 +192,26 @@ enum mhi_ch_ee_mask {
  * enum mhi_er_data_type - Event ring data types
  * @MHI_ER_DATA: Only client data over this ring
  * @MHI_ER_CTRL: MHI control data and client data
+ * @MHI_ER_BW_SCALE: MHI controller bandwidth scale functionality
+ * @MHI_ER_TIMESYNC: MHI controller time synchronization DB mode functionality
  */
 enum mhi_er_data_type {
 	MHI_ER_DATA,
 	MHI_ER_CTRL,
+	MHI_ER_BW_SCALE,
+	MHI_ER_TIMESYNC,
+};
+
+/**
+ * enum mhi_er_priority - Event ring processing priority
+ * @MHI_ER_PRIORITY_DEFAULT_NOSLEEP: processed by tasklet
+ * @MHI_ER_PRIORITY_HI_NOSLEEP: processed by hi-priority tasklet
+ * @MHI_ER_PRIORITY_HI_SLEEP: processed by hi-priority wq
+ */
+enum mhi_er_priority {
+	MHI_ER_PRIORITY_DEFAULT_NOSLEEP,
+	MHI_ER_PRIORITY_HI_NOSLEEP,
+	MHI_ER_PRIORITY_HI_SLEEP,
 };
 
 /**
@@ -242,7 +267,7 @@ struct mhi_channel_config {
  * @irq_moderation_ms: Delay irq for additional events to be aggregated
  * @irq: IRQ associated with this ring
  * @channel: Dedicated channel number. U32_MAX indicates a non-dedicated ring
- * @priority: Priority of this ring. Use 1 for now
+ * @priority: Processing priority of this ring.
  * @mode: Doorbell mode
  * @data_type: Type of data this ring will process
  * @hardware_event: This ring is associated with hardware channels
@@ -296,9 +321,14 @@ struct mhi_controller_config {
  * @bhi: Points to base of MHI BHI register space
  * @bhie: Points to base of MHI BHIe register space
  * @wake_db: MHI WAKE doorbell register address
+ * @host_notify_db: MHI host notification db address
  * @iova_start: IOMMU starting address for data (required)
  * @iova_stop: IOMMU stop address for data (required)
  * @fw_image: Firmware image name for normal booting (optional)
+ * @fw_data: Firmware image data content for normal booting, used only
+ *           if fw_image is NULL and fbc_download is true (optional)
+ * @fw_sz: Firmware image data size for normal booting, used only if fw_image
+ *         is NULL and fbc_download is true (optional)
  * @edl_image: Firmware image name for emergency download mode (optional)
  * @rddm_size: RAM dump size that host should allocate for debugging purpose
  * @sbl_size: SBL image size downloaded through BHIe (optional)
@@ -306,6 +336,7 @@ struct mhi_controller_config {
  * @reg_len: Length of the MHI MMIO region (required)
  * @fbc_image: Points to firmware image buffer
  * @rddm_image: Points to RAM dump buffer
+ * @tme_supported_image: Flag to make decision about firmware download start address (optional)
  * @mhi_chan: Points to the channel configuration table
  * @lpm_chans: List of channels that require LPM notifications
  * @irq: base irq # to request (required)
@@ -332,7 +363,7 @@ struct mhi_controller_config {
  * @dev_state: MHI device state
  * @dev_wake: Device wakeup count
  * @pending_pkts: Pending packets for the controller
- * @M0, M2, M3: Counters to track number of device MHI state changes
+ * @M0, M2, M3, M3_fast: Counters to track number of device MHI state changes
  * @transition_list: List of MHI state transitions
  * @transition_lock: Lock for protecting MHI state transition list
  * @wlock: Lock for protecting device wakeup
@@ -346,6 +377,7 @@ struct mhi_controller_config {
  * @wake_toggle: CB function to assert and de-assert device wake (optional)
  * @runtime_get: CB function to controller runtime resume (required)
  * @runtime_put: CB function to decrement pm usage (required)
+ * @runtime_last_busy: CB function for controller to mark last busy (optional)
  * @map_single: CB function to create TRE buffer
  * @unmap_single: CB function to destroy TRE buffer
  * @read_reg: Read a MHI register via the physical link (required)
@@ -353,6 +385,7 @@ struct mhi_controller_config {
  * @reset: Controller specific reset function (optional)
  * @buffer_len: Bounce buffer length
  * @index: Index of the MHI controller instance
+ * @img_pre_alloc: allocate rddm and fbc image buffers one time
  * @bounce_buf: Use of bounce buffer
  * @fbc_download: MHI host needs to do complete image transfer (optional)
  * @wake_set: Device wakeup set flag
@@ -380,10 +413,13 @@ struct mhi_controller {
 	void __iomem *bhi;
 	void __iomem *bhie;
 	void __iomem *wake_db;
+	void __iomem *host_notify_db;
 
 	dma_addr_t iova_start;
 	dma_addr_t iova_stop;
 	const char *fw_image;
+	const u8 *fw_data;
+	size_t fw_sz;
 	const char *edl_image;
 	size_t rddm_size;
 	size_t sbl_size;
@@ -391,6 +427,7 @@ struct mhi_controller {
 	size_t reg_len;
 	struct image_info *fbc_image;
 	struct image_info *rddm_image;
+	bool tme_supported_image;
 	struct mhi_chan *mhi_chan;
 	struct list_head lpm_chans;
 	int *irq;
@@ -419,7 +456,7 @@ struct mhi_controller {
 	enum mhi_state dev_state;
 	atomic_t dev_wake;
 	atomic_t pending_pkts;
-	u32 M0, M2, M3;
+	u32 M0, M2, M3, M3_fast;
 	struct list_head transition_list;
 	spinlock_t transition_lock;
 	spinlock_t wlock;
@@ -435,6 +472,7 @@ struct mhi_controller {
 	void (*wake_toggle)(struct mhi_controller *mhi_cntrl);
 	int (*runtime_get)(struct mhi_controller *mhi_cntrl);
 	void (*runtime_put)(struct mhi_controller *mhi_cntrl);
+	void (*runtime_last_busy)(struct mhi_controller *mhi_cntrl);
 	int (*map_single)(struct mhi_controller *mhi_cntrl,
 			  struct mhi_buf_info *buf);
 	void (*unmap_single)(struct mhi_controller *mhi_cntrl,
@@ -447,6 +485,7 @@ struct mhi_controller {
 
 	size_t buffer_len;
 	int index;
+	bool img_pre_alloc;
 	bool bounce_buf;
 	bool fbc_download;
 	bool wake_set;
@@ -465,8 +504,11 @@ struct mhi_controller {
  * @dev: Driver model device node for the MHI device
  * @dev_type: MHI device type
  * @ul_chan_id: MHI channel id for UL transfer
+ * @ul_event_id: MHI event ring id for UL transfer
  * @dl_chan_id: MHI channel id for DL transfer
+ * @ul_event_id: MHI event ring id for DL transfer
  * @dev_wake: Device wakeup counter
+ * @tiocm: Device current terminal settings
  */
 struct mhi_device {
 	const struct mhi_device_id *id;
@@ -477,8 +519,11 @@ struct mhi_device {
 	struct device dev;
 	enum mhi_device_type dev_type;
 	int ul_chan_id;
+	int ul_event_id;
 	int dl_chan_id;
+	int dl_event_id;
 	u32 dev_wake;
+	u32 tiocm;
 };
 
 /**
@@ -764,13 +809,6 @@ int mhi_prepare_for_transfer_autoqueue(struct mhi_device *mhi_dev);
  * @mhi_dev: Device associated with the channels
  */
 void mhi_unprepare_from_transfer(struct mhi_device *mhi_dev);
-
-/**
- * mhi_poll - Poll for any available data in DL direction
- * @mhi_dev: Device associated with the channels
- * @budget: # of events to process
- */
-int mhi_poll(struct mhi_device *mhi_dev, u32 budget);
 
 /**
  * mhi_queue_dma - Send or receive DMA mapped buffers from client device

@@ -2,6 +2,7 @@
 /*
  * Copyright(C) 2016 Linaro Limited. All rights reserved.
  * Author: Mathieu Poirier <mathieu.poirier@linaro.org>
+ * Copyright (c) 2022, 2024 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/atomic.h>
@@ -16,23 +17,40 @@
 static int tmc_set_etf_buffer(struct coresight_device *csdev,
 			      struct perf_output_handle *handle);
 
-static void __tmc_etb_enable_hw(struct tmc_drvdata *drvdata)
+static int __tmc_etb_enable_hw(struct tmc_drvdata *drvdata)
 {
+	int rc = 0;
+
 	CS_UNLOCK(drvdata->base);
 
 	/* Wait for TMCSReady bit to be set */
-	tmc_wait_for_tmcready(drvdata);
+	rc = tmc_wait_for_tmcready(drvdata);
+	if (rc) {
+		dev_err(&drvdata->csdev->dev,
+			"Failed to enable: TMC not ready\n");
+		CS_LOCK(drvdata->base);
+		return rc;
+	}
 
 	writel_relaxed(TMC_MODE_CIRCULAR_BUFFER, drvdata->base + TMC_MODE);
-	writel_relaxed(TMC_FFCR_EN_FMT | TMC_FFCR_EN_TI |
-		       TMC_FFCR_FON_FLIN | TMC_FFCR_FON_TRIG_EVT |
-		       TMC_FFCR_TRIGON_TRIGIN,
-		       drvdata->base + TMC_FFCR);
+
+	if (drvdata->stop_on_flush) {
+		writel_relaxed(TMC_FFCR_EN_FMT | TMC_FFCR_EN_TI |
+			       TMC_FFCR_FON_FLIN | TMC_FFCR_FON_TRIG_EVT |
+			       TMC_FFCR_TRIGON_TRIGIN | TMC_FFCR_STOP_ON_FLUSH,
+			       drvdata->base + TMC_FFCR);
+	} else {
+		writel_relaxed(TMC_FFCR_EN_FMT | TMC_FFCR_EN_TI |
+			       TMC_FFCR_FON_FLIN | TMC_FFCR_FON_TRIG_EVT |
+			       TMC_FFCR_TRIGON_TRIGIN,
+			       drvdata->base + TMC_FFCR);
+	}
 
 	writel_relaxed(drvdata->trigger_cntr, drvdata->base + TMC_TRG);
 	tmc_enable_hw(drvdata);
 
 	CS_LOCK(drvdata->base);
+	return rc;
 }
 
 static int tmc_etb_enable_hw(struct tmc_drvdata *drvdata)
@@ -42,8 +60,10 @@ static int tmc_etb_enable_hw(struct tmc_drvdata *drvdata)
 	if (rc)
 		return rc;
 
-	__tmc_etb_enable_hw(drvdata);
-	return 0;
+	rc = __tmc_etb_enable_hw(drvdata);
+	if (rc)
+		coresight_disclaim_device(drvdata->csdev);
+	return rc;
 }
 
 static void tmc_etb_dump_hw(struct tmc_drvdata *drvdata)
@@ -73,7 +93,14 @@ static void __tmc_etb_disable_hw(struct tmc_drvdata *drvdata)
 {
 	CS_UNLOCK(drvdata->base);
 
+	/* Check if the etf already disabled*/
+	if (!(readl_relaxed(drvdata->base + TMC_CTL) & TMC_CTL_CAPT_EN)) {
+		CS_LOCK(drvdata->base);
+		return;
+	}
+
 	tmc_flush_and_stop(drvdata);
+	tmc_disable_stop_on_flush(drvdata);
 	/*
 	 * When operating in sysFS mode the content of the buffer needs to be
 	 * read before the TMC is disabled.
@@ -91,12 +118,20 @@ static void tmc_etb_disable_hw(struct tmc_drvdata *drvdata)
 	coresight_disclaim_device(drvdata->csdev);
 }
 
-static void __tmc_etf_enable_hw(struct tmc_drvdata *drvdata)
+static int __tmc_etf_enable_hw(struct tmc_drvdata *drvdata)
 {
+	int rc = 0;
+
 	CS_UNLOCK(drvdata->base);
 
 	/* Wait for TMCSReady bit to be set */
-	tmc_wait_for_tmcready(drvdata);
+	rc = tmc_wait_for_tmcready(drvdata);
+	if (rc) {
+		dev_err(&drvdata->csdev->dev,
+			"Failed to enable : TMC is not ready\n");
+		CS_LOCK(drvdata->base);
+		return rc;
+	}
 
 	writel_relaxed(TMC_MODE_HARDWARE_FIFO, drvdata->base + TMC_MODE);
 	writel_relaxed(TMC_FFCR_EN_FMT | TMC_FFCR_EN_TI,
@@ -105,6 +140,7 @@ static void __tmc_etf_enable_hw(struct tmc_drvdata *drvdata)
 	tmc_enable_hw(drvdata);
 
 	CS_LOCK(drvdata->base);
+	return rc;
 }
 
 static int tmc_etf_enable_hw(struct tmc_drvdata *drvdata)
@@ -114,8 +150,10 @@ static int tmc_etf_enable_hw(struct tmc_drvdata *drvdata)
 	if (rc)
 		return rc;
 
-	__tmc_etf_enable_hw(drvdata);
-	return 0;
+	rc = __tmc_etf_enable_hw(drvdata);
+	if (rc)
+		coresight_disclaim_device(drvdata->csdev);
+	return rc;
 }
 
 static void tmc_etf_disable_hw(struct tmc_drvdata *drvdata)
@@ -156,6 +194,14 @@ static int tmc_enable_etf_sink_sysfs(struct coresight_device *csdev)
 	unsigned long flags;
 	struct tmc_drvdata *drvdata = dev_get_drvdata(csdev->dev.parent);
 
+
+	if (drvdata->dclk) {
+
+		ret = clk_prepare_enable(drvdata->dclk);
+		if (ret)
+			return ret;
+	}
+
 	/*
 	 * If we don't have a buffer release the lock and allocate memory.
 	 * Otherwise keep the lock and move along.
@@ -166,8 +212,10 @@ static int tmc_enable_etf_sink_sysfs(struct coresight_device *csdev)
 
 		/* Allocating the memory here while outside of the spinlock */
 		buf = kzalloc(drvdata->size, GFP_KERNEL);
-		if (!buf)
-			return -ENOMEM;
+		if (!buf) {
+			ret = -ENOMEM;
+			goto out;
+		}
 
 		/* Let's try again */
 		spin_lock_irqsave(&drvdata->spinlock, flags);
@@ -178,13 +226,17 @@ static int tmc_enable_etf_sink_sysfs(struct coresight_device *csdev)
 		goto out;
 	}
 
+	if (!drvdata->pm_config.hw_powered) {
+		ret = -EINVAL;
+		goto out;
+	}
 	/*
 	 * In sysFS mode we can have multiple writers per sink.  Since this
 	 * sink is already enabled no memory is needed and the HW need not be
 	 * touched.
 	 */
 	if (drvdata->mode == CS_MODE_SYSFS) {
-		atomic_inc(csdev->refcnt);
+		atomic_inc(&csdev->refcnt);
 		goto out;
 	}
 
@@ -207,7 +259,7 @@ static int tmc_enable_etf_sink_sysfs(struct coresight_device *csdev)
 	ret = tmc_etb_enable_hw(drvdata);
 	if (!ret) {
 		drvdata->mode = CS_MODE_SYSFS;
-		atomic_inc(csdev->refcnt);
+		atomic_inc(&csdev->refcnt);
 	} else {
 		/* Free up the buffer if we failed to enable */
 		used = false;
@@ -218,6 +270,9 @@ out:
 	/* Free memory outside the spinlock if need be */
 	if (!used)
 		kfree(buf);
+
+	if (ret && drvdata->dclk)
+		clk_disable_unprepare(drvdata->dclk);
 
 	return ret;
 }
@@ -231,9 +286,22 @@ static int tmc_enable_etf_sink_perf(struct coresight_device *csdev, void *data)
 	struct perf_output_handle *handle = data;
 	struct cs_buffers *buf = etm_perf_sink_config(handle);
 
+	if (buf == NULL)
+		return -EINVAL;
+
+	if (drvdata->dclk) {
+		ret = clk_prepare_enable(drvdata->dclk);
+		if (ret)
+			return ret;
+	}
+
 	spin_lock_irqsave(&drvdata->spinlock, flags);
 	do {
 		ret = -EINVAL;
+
+		if (!drvdata->pm_config.hw_powered)
+			break;
+
 		if (drvdata->reading)
 			break;
 		/*
@@ -262,7 +330,7 @@ static int tmc_enable_etf_sink_perf(struct coresight_device *csdev, void *data)
 		 * use for this session.
 		 */
 		if (drvdata->pid == pid) {
-			atomic_inc(csdev->refcnt);
+			atomic_inc(&csdev->refcnt);
 			break;
 		}
 
@@ -271,16 +339,19 @@ static int tmc_enable_etf_sink_perf(struct coresight_device *csdev, void *data)
 			/* Associate with monitored process. */
 			drvdata->pid = pid;
 			drvdata->mode = CS_MODE_PERF;
-			atomic_inc(csdev->refcnt);
+			atomic_inc(&csdev->refcnt);
 		}
 	} while (0);
 	spin_unlock_irqrestore(&drvdata->spinlock, flags);
+
+	if (ret && drvdata->dclk)
+		clk_disable_unprepare(drvdata->dclk);
 
 	return ret;
 }
 
 static int tmc_enable_etf_sink(struct coresight_device *csdev,
-			       u32 mode, void *data)
+			       enum cs_mode mode, void *data)
 {
 	int ret;
 
@@ -307,48 +378,76 @@ static int tmc_enable_etf_sink(struct coresight_device *csdev,
 static int tmc_disable_etf_sink(struct coresight_device *csdev)
 {
 	unsigned long flags;
+	int ret = 0;
 	struct tmc_drvdata *drvdata = dev_get_drvdata(csdev->dev.parent);
 
 	spin_lock_irqsave(&drvdata->spinlock, flags);
 
+	if (!drvdata->pm_config.hw_powered) {
+		spin_unlock_irqrestore(&drvdata->spinlock, flags);
+		ret = -EINVAL;
+		goto disable_clk;
+	}
+
 	if (drvdata->reading) {
 		spin_unlock_irqrestore(&drvdata->spinlock, flags);
-		return -EBUSY;
+		ret = -EBUSY;
+		goto disable_clk;
 	}
 
-	if (atomic_dec_return(csdev->refcnt)) {
+	if (atomic_dec_return(&csdev->refcnt)) {
 		spin_unlock_irqrestore(&drvdata->spinlock, flags);
-		return -EBUSY;
+		ret = -EBUSY;
+		goto disable_clk;
+	} else {
+		/* Complain if we (somehow) got out of sync */
+		WARN_ON_ONCE(drvdata->mode == CS_MODE_DISABLED);
+		tmc_etb_disable_hw(drvdata);
+		/* Dissociate from monitored process. */
+		drvdata->pid = -1;
+		drvdata->mode = CS_MODE_DISABLED;
+		spin_unlock_irqrestore(&drvdata->spinlock, flags);
+		dev_dbg(&csdev->dev, "TMC-ETB/ETF disabled\n");
 	}
 
-	/* Complain if we (somehow) got out of sync */
-	WARN_ON_ONCE(drvdata->mode == CS_MODE_DISABLED);
-	tmc_etb_disable_hw(drvdata);
-	/* Dissociate from monitored process. */
-	drvdata->pid = -1;
-	drvdata->mode = CS_MODE_DISABLED;
 
-	spin_unlock_irqrestore(&drvdata->spinlock, flags);
+disable_clk:
+	if (drvdata->dclk)
+		clk_disable_unprepare(drvdata->dclk);
 
-	dev_dbg(&csdev->dev, "TMC-ETB/ETF disabled\n");
-	return 0;
+	return ret;
 }
 
 static int tmc_enable_etf_link(struct coresight_device *csdev,
-			       int inport, int outport)
+			       struct coresight_connection *in,
+			       struct coresight_connection *out)
 {
 	int ret = 0;
 	unsigned long flags;
 	struct tmc_drvdata *drvdata = dev_get_drvdata(csdev->dev.parent);
 	bool first_enable = false;
 
-	spin_lock_irqsave(&drvdata->spinlock, flags);
-	if (drvdata->reading) {
-		spin_unlock_irqrestore(&drvdata->spinlock, flags);
-		return -EBUSY;
+	if (drvdata->dclk) {
+		ret = clk_prepare_enable(drvdata->dclk);
+		if (ret)
+			return ret;
 	}
 
-	if (atomic_read(&csdev->refcnt[0]) == 0) {
+	spin_lock_irqsave(&drvdata->spinlock, flags);
+
+	if (!drvdata->pm_config.hw_powered) {
+		spin_unlock_irqrestore(&drvdata->spinlock, flags);
+		ret = -EINVAL;
+		goto disable_clk;
+	}
+
+	if (drvdata->reading) {
+		spin_unlock_irqrestore(&drvdata->spinlock, flags);
+		ret = -EBUSY;
+		goto disable_clk;
+	}
+
+	if (atomic_read(&csdev->refcnt) == 0) {
 		ret = tmc_etf_enable_hw(drvdata);
 		if (!ret) {
 			drvdata->mode = CS_MODE_SYSFS;
@@ -356,16 +455,20 @@ static int tmc_enable_etf_link(struct coresight_device *csdev,
 		}
 	}
 	if (!ret)
-		atomic_inc(&csdev->refcnt[0]);
+		atomic_inc(&csdev->refcnt);
 	spin_unlock_irqrestore(&drvdata->spinlock, flags);
 
 	if (first_enable)
 		dev_dbg(&csdev->dev, "TMC-ETF enabled\n");
+disable_clk:
+	if (ret && drvdata->dclk)
+		clk_disable_unprepare(drvdata->dclk);
 	return ret;
 }
 
 static void tmc_disable_etf_link(struct coresight_device *csdev,
-				 int inport, int outport)
+				 struct coresight_connection *in,
+				 struct coresight_connection *out)
 {
 	unsigned long flags;
 	struct tmc_drvdata *drvdata = dev_get_drvdata(csdev->dev.parent);
@@ -377,12 +480,20 @@ static void tmc_disable_etf_link(struct coresight_device *csdev,
 		return;
 	}
 
-	if (atomic_dec_return(&csdev->refcnt[0]) == 0) {
+	if (!drvdata->pm_config.hw_powered)
+		goto disable_clk;
+
+	if (atomic_dec_return(&csdev->refcnt) == 0) {
 		tmc_etf_disable_hw(drvdata);
 		drvdata->mode = CS_MODE_DISABLED;
 		last_disable = true;
 	}
+
+disable_clk:
 	spin_unlock_irqrestore(&drvdata->spinlock, flags);
+
+	if (drvdata->dclk)
+		clk_disable_unprepare(drvdata->dclk);
 
 	if (last_disable)
 		dev_dbg(&csdev->dev, "TMC-ETF disabled\n");
@@ -428,7 +539,7 @@ static int tmc_set_etf_buffer(struct coresight_device *csdev,
 		return -EINVAL;
 
 	/* wrap head around to the amount of space we have */
-	head = handle->head & ((buf->nr_pages << PAGE_SHIFT) - 1);
+	head = handle->head & (((unsigned long)buf->nr_pages << PAGE_SHIFT) - 1);
 
 	/* find the page to write to */
 	buf->cur = head / PAGE_SIZE;
@@ -464,8 +575,11 @@ static unsigned long tmc_update_etf_buffer(struct coresight_device *csdev,
 
 	spin_lock_irqsave(&drvdata->spinlock, flags);
 
+	if (!drvdata->pm_config.hw_powered)
+		goto out;
+
 	/* Don't do anything if another tracer is using this sink */
-	if (atomic_read(csdev->refcnt) != 1)
+	if (atomic_read(&csdev->refcnt) != 1)
 		goto out;
 
 	CS_UNLOCK(drvdata->base);
@@ -618,6 +732,10 @@ int tmc_read_prepare_etb(struct tmc_drvdata *drvdata)
 
 	/* Disable the TMC if need be */
 	if (drvdata->mode == CS_MODE_SYSFS) {
+		if (!drvdata->pm_config.hw_powered) {
+			ret = -EINVAL;
+			goto out;
+		}
 		/* There is no point in reading a TMC in HW FIFO mode */
 		mode = readl_relaxed(drvdata->base + TMC_MODE);
 		if (mode != TMC_MODE_CIRCULAR_BUFFER) {
@@ -639,6 +757,7 @@ int tmc_read_unprepare_etb(struct tmc_drvdata *drvdata)
 	char *buf = NULL;
 	enum tmc_mode mode;
 	unsigned long flags;
+	int ret = 0;
 
 	/* config types are set a boot time and never change */
 	if (WARN_ON_ONCE(drvdata->config_type != TMC_CONFIG_TYPE_ETB &&
@@ -649,6 +768,10 @@ int tmc_read_unprepare_etb(struct tmc_drvdata *drvdata)
 
 	/* Re-enable the TMC if need be */
 	if (drvdata->mode == CS_MODE_SYSFS) {
+		if (!drvdata->pm_config.hw_powered) {
+			ret = -EINVAL;
+			goto out;
+		}
 		/* There is no point in reading a TMC in HW FIFO mode */
 		mode = readl_relaxed(drvdata->base + TMC_MODE);
 		if (mode != TMC_MODE_CIRCULAR_BUFFER) {
@@ -664,7 +787,7 @@ int tmc_read_unprepare_etb(struct tmc_drvdata *drvdata)
 		 * can't be NULL.
 		 */
 		memset(drvdata->buf, 0, drvdata->size);
-		__tmc_etb_enable_hw(drvdata);
+		 __tmc_etb_enable_hw(drvdata);
 	} else {
 		/*
 		 * The ETB/ETF is not tracing and the buffer was just read.
@@ -673,7 +796,7 @@ int tmc_read_unprepare_etb(struct tmc_drvdata *drvdata)
 		buf = drvdata->buf;
 		drvdata->buf = NULL;
 	}
-
+out:
 	drvdata->reading = false;
 	spin_unlock_irqrestore(&drvdata->spinlock, flags);
 
@@ -683,5 +806,5 @@ int tmc_read_unprepare_etb(struct tmc_drvdata *drvdata)
 	 */
 	kfree(buf);
 
-	return 0;
+	return ret;
 }

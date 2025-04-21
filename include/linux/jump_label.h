@@ -108,7 +108,7 @@ struct static_key {
 
 #endif /* __ASSEMBLY__ */
 
-#ifdef CONFIG_JUMP_LABEL
+#if defined(CONFIG_JUMP_LABEL) && !defined(BUILD_FIPS140_KO)
 #include <asm/jump_label.h>
 
 #ifndef __ASSEMBLY__
@@ -195,7 +195,30 @@ enum jump_label_type {
 
 struct module;
 
-#ifdef CONFIG_JUMP_LABEL
+#ifdef BUILD_FIPS140_KO
+
+#include <linux/atomic.h>
+
+static inline int static_key_count(struct static_key *key)
+{
+	return raw_atomic_read(&key->enabled);
+}
+
+static __always_inline bool static_key_false(struct static_key *key)
+{
+	if (unlikely(static_key_count(key) > 0))
+		return true;
+	return false;
+}
+
+static __always_inline bool static_key_true(struct static_key *key)
+{
+	if (likely(static_key_count(key) > 0))
+		return true;
+	return false;
+}
+
+#elif defined(CONFIG_JUMP_LABEL)
 
 #define JUMP_TYPE_FALSE		0UL
 #define JUMP_TYPE_TRUE		1UL
@@ -220,22 +243,21 @@ extern void jump_label_lock(void);
 extern void jump_label_unlock(void);
 extern void arch_jump_label_transform(struct jump_entry *entry,
 				      enum jump_label_type type);
-extern void arch_jump_label_transform_static(struct jump_entry *entry,
-					     enum jump_label_type type);
 extern bool arch_jump_label_transform_queue(struct jump_entry *entry,
 					    enum jump_label_type type);
 extern void arch_jump_label_transform_apply(void);
 extern int jump_label_text_reserved(void *start, void *end);
-extern void static_key_slow_inc(struct static_key *key);
+extern bool static_key_slow_inc(struct static_key *key);
+extern bool static_key_fast_inc_not_disabled(struct static_key *key);
 extern void static_key_slow_dec(struct static_key *key);
-extern void static_key_slow_inc_cpuslocked(struct static_key *key);
+extern bool static_key_slow_inc_cpuslocked(struct static_key *key);
 extern void static_key_slow_dec_cpuslocked(struct static_key *key);
-extern void jump_label_apply_nops(struct module *mod);
 extern int static_key_count(struct static_key *key);
 extern void static_key_enable(struct static_key *key);
 extern void static_key_disable(struct static_key *key);
 extern void static_key_enable_cpuslocked(struct static_key *key);
 extern void static_key_disable_cpuslocked(struct static_key *key);
+extern enum jump_label_type jump_label_init_type(struct jump_entry *entry);
 
 /*
  * We should be using ATOMIC_INIT() for initializing .enabled, but
@@ -258,7 +280,7 @@ extern void static_key_disable_cpuslocked(struct static_key *key);
 
 static __always_inline int static_key_count(struct static_key *key)
 {
-	return arch_atomic_read(&key->enabled);
+	return raw_atomic_read(&key->enabled);
 }
 
 static __always_inline void jump_label_init(void)
@@ -280,11 +302,23 @@ static __always_inline bool static_key_true(struct static_key *key)
 	return false;
 }
 
-static inline void static_key_slow_inc(struct static_key *key)
+static inline bool static_key_fast_inc_not_disabled(struct static_key *key)
 {
+	int v;
+
 	STATIC_KEY_CHECK_USE(key);
-	atomic_inc(&key->enabled);
+	/*
+	 * Prevent key->enabled getting negative to follow the same semantics
+	 * as for CONFIG_JUMP_LABEL=y, see kernel/jump_label.c comment.
+	 */
+	v = atomic_read(&key->enabled);
+	do {
+		if (v < 0 || (v + 1) < 0)
+			return false;
+	} while (!likely(atomic_try_cmpxchg(&key->enabled, &v, v + 1)));
+	return true;
 }
+#define static_key_slow_inc(key)	static_key_fast_inc_not_disabled(key)
 
 static inline void static_key_slow_dec(struct static_key *key)
 {
@@ -302,11 +336,6 @@ static inline int jump_label_text_reserved(void *start, void *end)
 
 static inline void jump_label_lock(void) {}
 static inline void jump_label_unlock(void) {}
-
-static inline int jump_label_apply_nops(struct module *mod)
-{
-	return 0;
-}
 
 static inline void static_key_enable(struct static_key *key)
 {
@@ -415,7 +444,7 @@ extern bool ____wrong_branch_error(void);
 	static_key_count((struct static_key *)x) > 0;				\
 })
 
-#ifdef CONFIG_JUMP_LABEL
+#if defined(CONFIG_JUMP_LABEL) && !defined(BUILD_FIPS140_KO)
 
 /*
  * Combine the right initial value (type) with the right branch order

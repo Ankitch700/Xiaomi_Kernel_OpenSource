@@ -1,5 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0 */
-/* Copyright (c) 2016-2018, 2020, The Linux Foundation. All rights reserved. */
+/* Copyright (c) 2016-2018, 2020, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2023, Qualcomm Innovation Center, Inc. All rights reserved.
+ */
 
 #include <linux/debugfs.h>
 #include <linux/kernel.h>
@@ -17,6 +19,7 @@
 #define MAX_SLV_ID		8
 #define SLAVE_ID_MASK		0x7
 #define SLAVE_ID_SHIFT		16
+#define CMD_DB_STANDALONE_MASK BIT(0)
 
 /**
  * struct entry_header: header for each entry in cmddb
@@ -141,13 +144,17 @@ static int cmd_db_get_header(const char *id, const struct entry_header **eh,
 	const struct rsc_hdr *rsc_hdr;
 	const struct entry_header *ent;
 	int ret, i, j;
-	u8 query[8];
+	u8 query[sizeof(ent->id)] __nonstring;
 
 	ret = cmd_db_ready();
 	if (ret)
 		return ret;
 
-	/* Pad out query string to same length as in DB */
+	/*
+	 * Pad out query string to same length as in DB. NOTE: the output
+	 * query string is not necessarily '\0' terminated if it bumps up
+	 * against the max size. That's OK and expected.
+	 */
 	strncpy(query, id, sizeof(query));
 
 	for (i = 0; i < MAX_SLV_ID; i++) {
@@ -280,7 +287,7 @@ static int cmd_db_debugfs_dump(struct seq_file *seq, void *p)
 		ent = rsc_to_entry_header(rsc);
 		for (j = 0; j < le16_to_cpu(rsc->cnt); j++, ent++) {
 			seq_printf(seq, "0x%05x: %*pEp", le32_to_cpu(ent->addr),
-				   (int)sizeof(ent->id), ent->id);
+				   (int)strnlen(ent->id, sizeof(ent->id)), ent->id);
 
 			len = le16_to_cpu(ent->len);
 			if (len) {
@@ -309,6 +316,16 @@ static const struct file_operations cmd_db_debugfs_ops = {
 	.release = single_release,
 };
 
+bool cmd_db_is_standalone(void)
+{
+	int ret = cmd_db_ready();
+	u32 standalone = le32_to_cpu(cmd_db_header->reserved) &
+			 CMD_DB_STANDALONE_MASK;
+
+	return !ret && standalone;
+}
+EXPORT_SYMBOL(cmd_db_is_standalone);
+
 static int cmd_db_dev_probe(struct platform_device *pdev)
 {
 	struct reserved_mem *rmem;
@@ -333,6 +350,9 @@ static int cmd_db_dev_probe(struct platform_device *pdev)
 	}
 
 	debugfs_create_file("cmd-db", 0400, NULL, NULL, &cmd_db_debugfs_ops);
+
+	if (cmd_db_is_standalone())
+		pr_info("Command DB is initialized in standalone mode\n");
 
 	return 0;
 }

@@ -435,11 +435,11 @@ static int fw_decompress_xz_pages(struct device *dev, struct fw_priv *fw_priv,
 
 		/* decompress onto the new allocated page */
 		page = fw_priv->pages[fw_priv->nr_pages - 1];
-		xz_buf.out = kmap(page);
+		xz_buf.out = kmap_local_page(page);
 		xz_buf.out_pos = 0;
 		xz_buf.out_size = PAGE_SIZE;
 		xz_ret = xz_dec_run(xz_dec, &xz_buf);
-		kunmap(page);
+		kunmap_local(xz_buf.out);
 		fw_priv->size += xz_buf.out_pos;
 		/* partial decompression means either end or error */
 		if (xz_buf.out_pos != PAGE_SIZE)
@@ -467,21 +467,85 @@ static int fw_decompress_xz(struct device *dev, struct fw_priv *fw_priv,
 #endif /* CONFIG_FW_LOADER_COMPRESS_XZ */
 
 /* direct firmware loading support */
-static char fw_path_para[256];
+#define CUSTOM_FW_PATH_COUNT	10
+#define PATH_SIZE		255
+static char fw_path_para[CUSTOM_FW_PATH_COUNT][PATH_SIZE];
 static const char * const fw_path[] = {
-	fw_path_para,
+	fw_path_para[0],
+	fw_path_para[1],
+	fw_path_para[2],
+	fw_path_para[3],
+	fw_path_para[4],
+	fw_path_para[5],
+	fw_path_para[6],
+	fw_path_para[7],
+	fw_path_para[8],
+	fw_path_para[9],
 	"/lib/firmware/updates/" UTS_RELEASE,
 	"/lib/firmware/updates",
 	"/lib/firmware/" UTS_RELEASE,
 	"/lib/firmware"
 };
 
+static char strpath[PATH_SIZE * CUSTOM_FW_PATH_COUNT];
+static int firmware_param_path_set(const char *val, const struct kernel_param *kp)
+{
+	int i;
+	char *path, *end;
+
+	strscpy(strpath, val, sizeof(strpath));
+	/* Remove leading and trailing spaces from path */
+	path = strim(strpath);
+	for (i = 0; path && i < CUSTOM_FW_PATH_COUNT; i++) {
+		end = strchr(path, ',');
+
+		/* Skip continuous token case, for example ',,,' */
+		if (end == path) {
+			i--;
+			path = ++end;
+			continue;
+		}
+
+		if (end != NULL)
+			*end = '\0';
+		else {
+			/* end of the string reached and no other tockens ','  */
+			strscpy(fw_path_para[i], path, PATH_SIZE);
+			break;
+		}
+
+		strscpy(fw_path_para[i], path, PATH_SIZE);
+		path = ++end;
+	}
+
+	return 0;
+}
+
+static int firmware_param_path_get(char *buffer, const struct kernel_param *kp)
+{
+	int count = 0, i;
+
+	for (i = 0; i < CUSTOM_FW_PATH_COUNT; i++) {
+		if (strlen(fw_path_para[i]) != 0)
+			count += scnprintf(buffer + count, PATH_SIZE, "%s%s", fw_path_para[i], ",");
+	}
+
+	buffer[count - 1] = '\0';
+
+	return count - 1;
+}
 /*
- * Typical usage is that passing 'firmware_class.path=$CUSTOMIZED_PATH'
+ * Typical usage is that passing 'firmware_class.path=/vendor,/firwmare_mnt'
  * from kernel command line because firmware_class is generally built in
- * kernel instead of module.
+ * kernel instead of module. ',' is used as delimiter for setting 10
+ * custom paths for firmware loader.
  */
-module_param_string(path, fw_path_para, sizeof(fw_path_para), 0644);
+
+static const struct kernel_param_ops firmware_param_ops = {
+	.set = firmware_param_path_set,
+	.get = firmware_param_path_get,
+};
+module_param_cb(path, &firmware_param_ops, NULL, 0644);
 MODULE_PARM_DESC(path, "customized firmware image search path with a higher priority than default path");
 
 static int
@@ -493,9 +557,9 @@ fw_get_filesystem_firmware(struct device *device, struct fw_priv *fw_priv,
 					     const void *in_buffer))
 {
 	size_t size;
-	int i, len;
+	int i, len, maxlen = 0;
 	int rc = -ENOENT;
-	char *path;
+	char *path, *nt = NULL;
 	size_t msize = INT_MAX;
 	void *buffer = NULL;
 
@@ -518,8 +582,17 @@ fw_get_filesystem_firmware(struct device *device, struct fw_priv *fw_priv,
 		if (!fw_path[i][0])
 			continue;
 
-		len = snprintf(path, PATH_MAX, "%s/%s%s",
-			       fw_path[i], fw_priv->fw_name, suffix);
+		/* strip off \n from customized path */
+		maxlen = strlen(fw_path[i]);
+		if (i == 0) {
+			nt = strchr(fw_path[i], '\n');
+			if (nt)
+				maxlen = nt - fw_path[i];
+		}
+
+		len = snprintf(path, PATH_MAX, "%.*s/%s%s",
+			       maxlen, fw_path[i],
+			       fw_priv->fw_name, suffix);
 		if (len >= PATH_MAX) {
 			rc = -ENAMETOOLONG;
 			break;
@@ -541,12 +614,16 @@ fw_get_filesystem_firmware(struct device *device, struct fw_priv *fw_priv,
 						       file_size_ptr,
 						       READING_FIRMWARE);
 		if (rc < 0) {
-			if (rc != -ENOENT)
-				dev_warn(device, "loading %s failed with error %d\n",
-					 path, rc);
-			else
-				dev_dbg(device, "loading %s failed for no such file or directory.\n",
-					 path);
+			if (!(fw_priv->opt_flags & FW_OPT_NO_WARN)) {
+				if (rc != -ENOENT)
+					dev_warn(device,
+						 "loading %s failed with error %d\n",
+						 path, rc);
+				else
+					dev_dbg(device,
+						"loading %s failed for no such file or directory.\n",
+						path);
+			}
 			continue;
 		}
 		size = rc;
@@ -791,6 +868,50 @@ static void fw_abort_batch_reqs(struct firmware *fw)
 	mutex_unlock(&fw_lock);
 }
 
+#if defined(CONFIG_FW_LOADER_DEBUG)
+#include <crypto/hash.h>
+#include <crypto/sha2.h>
+
+static void fw_log_firmware_info(const struct firmware *fw, const char *name, struct device *device)
+{
+	struct shash_desc *shash;
+	struct crypto_shash *alg;
+	u8 *sha256buf;
+	char *outbuf;
+
+	alg = crypto_alloc_shash("sha256", 0, 0);
+	if (IS_ERR(alg))
+		return;
+
+	sha256buf = kmalloc(SHA256_DIGEST_SIZE, GFP_KERNEL);
+	outbuf = kmalloc(SHA256_BLOCK_SIZE + 1, GFP_KERNEL);
+	shash = kmalloc(sizeof(*shash) + crypto_shash_descsize(alg), GFP_KERNEL);
+	if (!sha256buf || !outbuf || !shash)
+		goto out_free;
+
+	shash->tfm = alg;
+
+	if (crypto_shash_digest(shash, fw->data, fw->size, sha256buf) < 0)
+		goto out_shash;
+
+	for (int i = 0; i < SHA256_DIGEST_SIZE; i++)
+		sprintf(&outbuf[i * 2], "%02x", sha256buf[i]);
+	outbuf[SHA256_BLOCK_SIZE] = 0;
+	dev_dbg(device, "Loaded FW: %s, sha256: %s\n", name, outbuf);
+
+out_shash:
+	crypto_free_shash(alg);
+out_free:
+	kfree(shash);
+	kfree(outbuf);
+	kfree(sha256buf);
+}
+#else
+static void fw_log_firmware_info(const struct firmware *fw, const char *name,
+				 struct device *device)
+{}
+#endif
+
 /* called from request_firmware() and request_firmware_work_func() */
 static int
 _request_firmware(const struct firmware **firmware_p, const char *name,
@@ -821,7 +942,7 @@ _request_firmware(const struct firmware **firmware_p, const char *name,
 	 * called by a driver when serving an unrelated request from userland, we use
 	 * the kernel credentials to read the file.
 	 */
-	kern_cred = prepare_kernel_cred(NULL);
+	kern_cred = prepare_kernel_cred(&init_task);
 	if (!kern_cred) {
 		ret = -ENOMEM;
 		goto out;
@@ -861,11 +982,13 @@ _request_firmware(const struct firmware **firmware_p, const char *name,
 	revert_creds(old_cred);
 	put_cred(kern_cred);
 
- out:
+out:
 	if (ret < 0) {
 		fw_abort_batch_reqs(fw);
 		release_firmware(fw);
 		fw = NULL;
+	} else {
+		fw_log_firmware_info(fw, name, device);
 	}
 
 	*firmware_p = fw;

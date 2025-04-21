@@ -38,20 +38,20 @@ struct thread_info {
 #define INIT_THREAD_INFO(tsk)			\
 {						\
 	.task		= &tsk,			\
-	.flags		= 0,			\
+	.flags		= _TIF_FIXADE,		\
 	.cpu		= 0,			\
 	.preempt_count	= INIT_PREEMPT_COUNT,	\
 }
 
 /* How to get the thread information struct from C. */
-register struct thread_info *__current_thread_info __asm__("$r2");
+register struct thread_info *__current_thread_info __asm__("$tp");
 
 static inline struct thread_info *current_thread_info(void)
 {
 	return __current_thread_info;
 }
 
-register unsigned long current_stack_pointer __asm__("$r3");
+register unsigned long current_stack_pointer __asm__("$sp");
 
 #endif /* !__ASSEMBLY__ */
 
@@ -84,6 +84,8 @@ register unsigned long current_stack_pointer __asm__("$r3");
 #define TIF_SINGLESTEP		16	/* Single Step */
 #define TIF_LSX_CTX_LIVE	17	/* LSX context must be preserved */
 #define TIF_LASX_CTX_LIVE	18	/* LASX context must be preserved */
+#define TIF_USEDLBT		19	/* LBT was used by this task this quantum (SMP) */
+#define TIF_LBT_CTX_LIVE	20	/* LBT context must be preserved */
 
 #define _TIF_SIGPENDING		(1<<TIF_SIGPENDING)
 #define _TIF_NEED_RESCHED	(1<<TIF_NEED_RESCHED)
@@ -101,6 +103,8 @@ register unsigned long current_stack_pointer __asm__("$r3");
 #define _TIF_SINGLESTEP		(1<<TIF_SINGLESTEP)
 #define _TIF_LSX_CTX_LIVE	(1<<TIF_LSX_CTX_LIVE)
 #define _TIF_LASX_CTX_LIVE	(1<<TIF_LASX_CTX_LIVE)
+#define _TIF_USEDLBT		(1<<TIF_USEDLBT)
+#define _TIF_LBT_CTX_LIVE	(1<<TIF_LBT_CTX_LIVE)
 
 #endif /* __KERNEL__ */
 #endif /* _ASM_THREAD_INFO_H */

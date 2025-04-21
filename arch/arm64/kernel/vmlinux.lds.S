@@ -13,14 +13,34 @@
 	*(__kvm_ex_table)					\
 	__stop___kvm_ex_table = .;
 
-#define HYPERVISOR_DATA_SECTIONS				\
+#ifdef CONFIG_TRACING
+#define HYPERVISOR_EVENT_IDS 					\
+	. = ALIGN(PAGE_SIZE);					\
+	__hyp_event_ids_start = .;				\
+	*(HYP_SECTION_NAME(.event_ids))				\
+	__hyp_event_ids_end = .;
+#else
+#define HYPERVISOR_EVENT_IDS
+#endif
+
+#define HYPERVISOR_RODATA_SECTIONS				\
 	HYP_SECTION_NAME(.rodata) : {				\
 		. = ALIGN(PAGE_SIZE);				\
 		__hyp_rodata_start = .;				\
 		*(HYP_SECTION_NAME(.data..ro_after_init))	\
 		*(HYP_SECTION_NAME(.rodata))			\
+		HYPERVISOR_EVENT_IDS				\
 		. = ALIGN(PAGE_SIZE);				\
 		__hyp_rodata_end = .;				\
+	}
+
+#define HYPERVISOR_DATA_SECTION					\
+	HYP_SECTION_NAME(.data) : {				\
+		. = ALIGN(PAGE_SIZE);				\
+		__hyp_data_start = .;				\
+		*(HYP_SECTION_NAME(.data))			\
+		. = ALIGN(PAGE_SIZE);				\
+		__hyp_data_end = .;				\
 	}
 
 #define HYPERVISOR_PERCPU_SECTION				\
@@ -51,7 +71,8 @@
 #define SBSS_ALIGN			PAGE_SIZE
 #else /* CONFIG_KVM */
 #define HYPERVISOR_EXTABLE
-#define HYPERVISOR_DATA_SECTIONS
+#define HYPERVISOR_RODATA_SECTIONS
+#define HYPERVISOR_DATA_SECTION
 #define HYPERVISOR_PERCPU_SECTION
 #define HYPERVISOR_RELOC_SECTION
 #define SBSS_ALIGN			0
@@ -93,6 +114,7 @@ jiffies = jiffies_64;
 
 #ifdef CONFIG_HIBERNATION
 #define HIBERNATE_TEXT					\
+	ALIGN_FUNCTION();				\
 	__hibernate_exit_text_start = .;		\
 	*(.hibernate_exit.text)				\
 	__hibernate_exit_text_end = .;
@@ -102,6 +124,7 @@ jiffies = jiffies_64;
 
 #ifdef CONFIG_KEXEC_CORE
 #define KEXEC_TEXT					\
+	ALIGN_FUNCTION();				\
 	__relocate_new_kernel_start = .;		\
 	*(.kexec_relocate.text)				\
 	__relocate_new_kernel_end = .;
@@ -115,9 +138,21 @@ jiffies = jiffies_64;
 	__entry_tramp_text_start = .;			\
 	*(.entry.tramp.text)				\
 	. = ALIGN(PAGE_SIZE);				\
-	__entry_tramp_text_end = .;
+	__entry_tramp_text_end = .;			\
+	*(.entry.tramp.rodata)
 #else
 #define TRAMP_TEXT
+#endif
+
+#ifdef CONFIG_UNWIND_TABLES
+#define UNWIND_DATA_SECTIONS				\
+	.eh_frame : {					\
+		__eh_frame_start = .;			\
+		*(.eh_frame)				\
+		__eh_frame_end = .;			\
+	}
+#else
+#define UNWIND_DATA_SECTIONS
 #endif
 
 /*
@@ -163,16 +198,21 @@ SECTIONS
 			ENTRY_TEXT
 			TEXT_TEXT
 			SCHED_TEXT
-			CPUIDLE_TEXT
 			LOCK_TEXT
 			KPROBES_TEXT
 			HYPERVISOR_TEXT
-			IDMAP_TEXT
 			*(.gnu.warning)
-		. = ALIGN(16);
-		*(.got)			/* Global offset table		*/
 	}
 
+	. = ALIGN(SEGMENT_ALIGN);
+	_etext = .;			/* End of text section */
+
+	/* everything from this point to __init_begin will be marked RO NX */
+	RO_DATA(PAGE_SIZE)
+
+	HYPERVISOR_RODATA_SECTIONS
+
+	.got : { *(.got) }
 	/*
 	 * Make sure that the .got.plt is either completely empty or it
 	 * contains only the lazy dispatch entries.
@@ -181,25 +221,29 @@ SECTIONS
 	ASSERT(SIZEOF(.got.plt) == 0 || SIZEOF(.got.plt) == 0x18,
 	       "Unexpected GOT/PLT entries detected!")
 
-	. = ALIGN(SEGMENT_ALIGN);
-	_etext = .;			/* End of text section */
-
-	/* everything from this point to __init_begin will be marked RO NX */
-	RO_DATA(PAGE_SIZE)
-
-	HYPERVISOR_DATA_SECTIONS
-
+#ifdef CONFIG_TRACING
+	.rodata.hyp_events : {
+		__hyp_events_start = .;
+		*(_hyp_events)
+		__hyp_events_end = .;
+	}
+	.rodata.hyp_printk_fmts : {
+		__hyp_printk_fmts_start = .;
+		*(HYP_SECTION_NAME(.printk_fmts))
+		__hyp_printk_fmts_end = .;
+	}
+#endif
 	/* code sections that are never executed via the kernel mapping */
 	.rodata.text : {
 		TRAMP_TEXT
 		HIBERNATE_TEXT
 		KEXEC_TEXT
+		IDMAP_TEXT
 		. = ALIGN(PAGE_SIZE);
 	}
 
 	idmap_pg_dir = .;
-	. += IDMAP_DIR_SIZE;
-	idmap_pg_end = .;
+	. += PAGE_SIZE;
 
 #ifdef CONFIG_UNMAP_KERNEL_AT_EL0
 	tramp_pg_dir = .;
@@ -231,9 +275,15 @@ SECTIONS
 		__alt_instructions_end = .;
 	}
 
+	UNWIND_DATA_SECTIONS
+
 	. = ALIGN(SEGMENT_ALIGN);
 	__inittext_end = .;
 	__initdata_begin = .;
+
+	init_idmap_pg_dir = .;
+	. += INIT_IDMAP_DIR_SIZE;
+	init_idmap_pg_end = .;
 
 	.init.data : {
 		INIT_DATA
@@ -253,20 +303,16 @@ SECTIONS
 	HYPERVISOR_RELOC_SECTION
 
 	.rela.dyn : ALIGN(8) {
+		__rela_start = .;
 		*(.rela .rela*)
+		__rela_end = .;
 	}
 
-	__rela_offset	= ABSOLUTE(ADDR(.rela.dyn) - KIMAGE_VADDR);
-	__rela_size	= SIZEOF(.rela.dyn);
-
-#ifdef CONFIG_RELR
 	.relr.dyn : ALIGN(8) {
+		__relr_start = .;
 		*(.relr.dyn)
+		__relr_end = .;
 	}
-
-	__relr_offset	= ABSOLUTE(ADDR(.relr.dyn) - KIMAGE_VADDR);
-	__relr_size	= SIZEOF(.relr.dyn);
-#endif
 
 	. = ALIGN(SEGMENT_ALIGN);
 	__initdata_end = .;
@@ -275,6 +321,8 @@ SECTIONS
 	_data = .;
 	_sdata = .;
 	RW_DATA(L1_CACHE_BYTES, PAGE_SIZE, THREAD_ALIGN)
+
+	HYPERVISOR_DATA_SECTION
 
 	/*
 	 * Data written with the MMU off but read with the MMU on requires
@@ -342,6 +390,8 @@ ASSERT(__idmap_text_end - (__idmap_text_start & ~(SZ_4K - 1)) <= SZ_4K,
 #ifdef CONFIG_HIBERNATION
 ASSERT(__hibernate_exit_text_end - __hibernate_exit_text_start <= SZ_4K,
        "Hibernate exit text is bigger than 4 KiB")
+ASSERT(__hibernate_exit_text_start == swsusp_arch_suspend_exit,
+       "Hibernate exit text does not start with swsusp_arch_suspend_exit")
 #endif
 #ifdef CONFIG_UNMAP_KERNEL_AT_EL0
 ASSERT((__entry_tramp_text_end - __entry_tramp_text_start) <= 3*PAGE_SIZE,
@@ -368,4 +418,6 @@ ASSERT(swapper_pg_dir - tramp_pg_dir == TRAMP_SWAPPER_OFFSET,
 ASSERT(__relocate_new_kernel_end - __relocate_new_kernel_start <= SZ_4K,
        "kexec relocation code is bigger than 4 KiB")
 ASSERT(KEXEC_CONTROL_PAGE_SIZE >= SZ_4K, "KEXEC_CONTROL_PAGE_SIZE is broken")
+ASSERT(__relocate_new_kernel_start == arm64_relocate_new_kernel,
+       "kexec control page does not start with arm64_relocate_new_kernel")
 #endif

@@ -122,7 +122,7 @@ xlog_do_io(
 	xfs_daddr_t		blk_no,
 	unsigned int		nbblks,
 	char			*data,
-	unsigned int		op)
+	enum req_op		op)
 {
 	int			error;
 
@@ -329,7 +329,7 @@ xlog_find_verify_cycle(
 	 * try a smaller size.  We need to be able to read at least
 	 * a log sector, or we're out of luck.
 	 */
-	bufblks = 1 << ffs(nbblks);
+	bufblks = roundup_pow_of_two(nbblks);
 	while (bufblks > log->l_logBBsize)
 		bufblks >>= 1;
 	while (!(buffer = xlog_alloc_buffer(log, bufblks))) {
@@ -1528,7 +1528,7 @@ xlog_write_log_records(
 	 * a smaller size.  We need to be able to write at least a
 	 * log sector, or we're out of luck.
 	 */
-	bufblks = 1 << ffs(blocks);
+	bufblks = roundup_pow_of_two(blocks);
 	while (bufblks > log->l_logBBsize)
 		bufblks >>= 1;
 	while (!(buffer = xlog_alloc_buffer(log, bufblks))) {
@@ -1723,30 +1723,24 @@ xlog_clear_stale_blocks(
  */
 void
 xlog_recover_release_intent(
-	struct xlog		*log,
-	unsigned short		intent_type,
-	uint64_t		intent_id)
+	struct xlog			*log,
+	unsigned short			intent_type,
+	uint64_t			intent_id)
 {
-	struct xfs_ail_cursor	cur;
-	struct xfs_log_item	*lip;
-	struct xfs_ail		*ailp = log->l_ailp;
+	struct xfs_defer_pending	*dfp, *n;
 
-	spin_lock(&ailp->ail_lock);
-	for (lip = xfs_trans_ail_cursor_first(ailp, &cur, 0); lip != NULL;
-	     lip = xfs_trans_ail_cursor_next(ailp, &cur)) {
+	list_for_each_entry_safe(dfp, n, &log->r_dfops, dfp_list) {
+		struct xfs_log_item	*lip = dfp->dfp_intent;
+
 		if (lip->li_type != intent_type)
 			continue;
 		if (!lip->li_ops->iop_match(lip, intent_id))
 			continue;
 
-		spin_unlock(&ailp->ail_lock);
-		lip->li_ops->iop_release(lip);
-		spin_lock(&ailp->ail_lock);
-		break;
-	}
+		ASSERT(xlog_item_is_intent(lip));
 
-	xfs_trans_ail_cursor_done(&cur);
-	spin_unlock(&ailp->ail_lock);
+		xfs_defer_cancel_recovery(log->l_mp, dfp);
+	}
 }
 
 int
@@ -1937,6 +1931,29 @@ xlog_buf_readahead(
 {
 	if (!xlog_is_buffer_cancelled(log, blkno, len))
 		xfs_buf_readahead(log->l_mp->m_ddev_targp, blkno, len, ops);
+}
+
+/*
+ * Create a deferred work structure for resuming and tracking the progress of a
+ * log intent item that was found during recovery.
+ */
+void
+xlog_recover_intent_item(
+	struct xlog			*log,
+	struct xfs_log_item		*lip,
+	xfs_lsn_t			lsn,
+	unsigned int			dfp_type)
+{
+	ASSERT(xlog_item_is_intent(lip));
+
+	xfs_defer_start_recovery(lip, dfp_type, &log->r_dfops);
+
+	/*
+	 * Insert the intent into the AIL directly and drop one reference so
+	 * that finishing or canceling the work will drop the other.
+	 */
+	xfs_trans_ail_insert(log->l_ailp, lip, lsn);
+	lip->li_ops->iop_unpin(lip, 0);
 }
 
 STATIC int
@@ -2511,7 +2528,7 @@ xlog_abort_defer_ops(
 
 	list_for_each_entry_safe(dfc, next, capture_list, dfc_list) {
 		list_del_init(&dfc->dfc_list);
-		xfs_defer_ops_capture_free(mp, dfc);
+		xfs_defer_ops_capture_abort(mp, dfc);
 	}
 }
 
@@ -2533,27 +2550,22 @@ xlog_abort_defer_ops(
  */
 STATIC int
 xlog_recover_process_intents(
-	struct xlog		*log)
+	struct xlog			*log)
 {
 	LIST_HEAD(capture_list);
-	struct xfs_ail_cursor	cur;
-	struct xfs_log_item	*lip;
-	struct xfs_ail		*ailp;
-	int			error = 0;
+	struct xfs_defer_pending	*dfp, *n;
+	int				error = 0;
 #if defined(DEBUG) || defined(XFS_WARN)
-	xfs_lsn_t		last_lsn;
-#endif
+	xfs_lsn_t			last_lsn;
 
-	ailp = log->l_ailp;
-	spin_lock(&ailp->ail_lock);
-#if defined(DEBUG) || defined(XFS_WARN)
 	last_lsn = xlog_assign_lsn(log->l_curr_cycle, log->l_curr_block);
 #endif
-	for (lip = xfs_trans_ail_cursor_first(ailp, &cur, 0);
-	     lip != NULL;
-	     lip = xfs_trans_ail_cursor_next(ailp, &cur)) {
-		if (!xlog_item_is_intent(lip))
-			break;
+
+	list_for_each_entry_safe(dfp, n, &log->r_dfops, dfp_list) {
+		struct xfs_log_item	*lip = dfp->dfp_intent;
+		const struct xfs_item_ops *ops = lip->li_ops;
+
+		ASSERT(xlog_item_is_intent(lip));
 
 		/*
 		 * We should never see a redo item with a LSN higher than
@@ -2567,19 +2579,19 @@ xlog_recover_process_intents(
 		 * deferred ops, you /must/ attach them to the capture list in
 		 * the recover routine or else those subsequent intents will be
 		 * replayed in the wrong order!
+		 *
+		 * The recovery function can free the log item, so we must not
+		 * access lip after it returns.
 		 */
-		spin_unlock(&ailp->ail_lock);
-		error = lip->li_ops->iop_recover(lip, &capture_list);
-		spin_lock(&ailp->ail_lock);
+		error = ops->iop_recover(dfp, &capture_list);
 		if (error) {
 			trace_xlog_intent_recovery_failed(log->l_mp, error,
-					lip->li_ops->iop_recover);
+					ops->iop_recover);
 			break;
 		}
-	}
 
-	xfs_trans_ail_cursor_done(&cur);
-	spin_unlock(&ailp->ail_lock);
+		xfs_defer_cancel_recovery(log->l_mp, dfp);
+	}
 	if (error)
 		goto err;
 
@@ -2600,27 +2612,27 @@ err:
  */
 STATIC void
 xlog_recover_cancel_intents(
-	struct xlog		*log)
+	struct xlog			*log)
 {
-	struct xfs_log_item	*lip;
-	struct xfs_ail_cursor	cur;
-	struct xfs_ail		*ailp;
+	struct xfs_defer_pending	*dfp, *n;
 
-	ailp = log->l_ailp;
-	spin_lock(&ailp->ail_lock);
-	lip = xfs_trans_ail_cursor_first(ailp, &cur, 0);
-	while (lip != NULL) {
-		if (!xlog_item_is_intent(lip))
-			break;
+	list_for_each_entry_safe(dfp, n, &log->r_dfops, dfp_list) {
+		ASSERT(xlog_item_is_intent(dfp->dfp_intent));
 
-		spin_unlock(&ailp->ail_lock);
-		lip->li_ops->iop_release(lip);
-		spin_lock(&ailp->ail_lock);
-		lip = xfs_trans_ail_cursor_next(ailp, &cur);
+		xfs_defer_cancel_recovery(log->l_mp, dfp);
 	}
+}
 
-	xfs_trans_ail_cursor_done(&cur);
-	spin_unlock(&ailp->ail_lock);
+/*
+ * Transfer ownership of the recovered log intent item to the recovery
+ * transaction.
+ */
+void
+xlog_recover_transfer_intent(
+	struct xfs_trans		*tp,
+	struct xfs_defer_pending	*dfp)
+{
+	dfp->dfp_intent = NULL;
 }
 
 /*
@@ -2629,21 +2641,21 @@ xlog_recover_cancel_intents(
  */
 STATIC void
 xlog_recover_clear_agi_bucket(
-	xfs_mount_t	*mp,
-	xfs_agnumber_t	agno,
-	int		bucket)
+	struct xfs_perag	*pag,
+	int			bucket)
 {
-	xfs_trans_t	*tp;
-	xfs_agi_t	*agi;
-	struct xfs_buf	*agibp;
-	int		offset;
-	int		error;
+	struct xfs_mount	*mp = pag->pag_mount;
+	struct xfs_trans	*tp;
+	struct xfs_agi		*agi;
+	struct xfs_buf		*agibp;
+	int			offset;
+	int			error;
 
 	error = xfs_trans_alloc(mp, &M_RES(mp)->tr_clearagi, 0, 0, 0, &tp);
 	if (error)
 		goto out_error;
 
-	error = xfs_read_agi(mp, tp, agno, &agibp);
+	error = xfs_read_agi(pag, tp, &agibp);
 	if (error)
 		goto out_abort;
 
@@ -2662,60 +2674,69 @@ xlog_recover_clear_agi_bucket(
 out_abort:
 	xfs_trans_cancel(tp);
 out_error:
-	xfs_warn(mp, "%s: failed to clear agi %d. Continuing.", __func__, agno);
+	xfs_warn(mp, "%s: failed to clear agi %d. Continuing.", __func__,
+			pag->pag_agno);
 	return;
 }
 
-STATIC xfs_agino_t
-xlog_recover_process_one_iunlink(
-	struct xfs_mount		*mp,
-	xfs_agnumber_t			agno,
-	xfs_agino_t			agino,
-	int				bucket)
+static int
+xlog_recover_iunlink_bucket(
+	struct xfs_perag	*pag,
+	struct xfs_agi		*agi,
+	int			bucket)
 {
-	struct xfs_buf			*ibp;
-	struct xfs_dinode		*dip;
-	struct xfs_inode		*ip;
-	xfs_ino_t			ino;
-	int				error;
+	struct xfs_mount	*mp = pag->pag_mount;
+	struct xfs_inode	*prev_ip = NULL;
+	struct xfs_inode	*ip;
+	xfs_agino_t		prev_agino, agino;
+	int			error = 0;
 
-	ino = XFS_AGINO_TO_INO(mp, agno, agino);
-	error = xfs_iget(mp, NULL, ino, 0, 0, &ip);
-	if (error)
-		goto fail;
+	agino = be32_to_cpu(agi->agi_unlinked[bucket]);
+	while (agino != NULLAGINO) {
+		error = xfs_iget(mp, NULL,
+				XFS_AGINO_TO_INO(mp, pag->pag_agno, agino),
+				0, 0, &ip);
+		if (error)
+			break;
 
-	/*
-	 * Get the on disk inode to find the next inode in the bucket.
-	 */
-	error = xfs_imap_to_bp(mp, NULL, &ip->i_imap, &ibp);
-	if (error)
-		goto fail_iput;
-	dip = xfs_buf_offset(ibp, ip->i_imap.im_boffset);
+		ASSERT(VFS_I(ip)->i_nlink == 0);
+		ASSERT(VFS_I(ip)->i_mode != 0);
+		xfs_iflags_clear(ip, XFS_IRECOVERY);
+		agino = ip->i_next_unlinked;
 
-	xfs_iflags_clear(ip, XFS_IRECOVERY);
-	ASSERT(VFS_I(ip)->i_nlink == 0);
-	ASSERT(VFS_I(ip)->i_mode != 0);
+		if (prev_ip) {
+			ip->i_prev_unlinked = prev_agino;
+			xfs_irele(prev_ip);
 
-	/* setup for the next pass */
-	agino = be32_to_cpu(dip->di_next_unlinked);
-	xfs_buf_relse(ibp);
+			/*
+			 * Ensure the inode is removed from the unlinked list
+			 * before we continue so that it won't race with
+			 * building the in-memory list here. This could be
+			 * serialised with the agibp lock, but that just
+			 * serialises via lockstepping and it's much simpler
+			 * just to flush the inodegc queue and wait for it to
+			 * complete.
+			 */
+			error = xfs_inodegc_flush(mp);
+			if (error)
+				break;
+		}
 
-	xfs_irele(ip);
-	return agino;
+		prev_agino = agino;
+		prev_ip = ip;
+	}
 
- fail_iput:
-	xfs_irele(ip);
- fail:
-	/*
-	 * We can't read in the inode this bucket points to, or this inode
-	 * is messed up.  Just ditch this bucket of inodes.  We will lose
-	 * some inodes and space, but at least we won't hang.
-	 *
-	 * Call xlog_recover_clear_agi_bucket() to perform a transaction to
-	 * clear the inode pointer in the bucket.
-	 */
-	xlog_recover_clear_agi_bucket(mp, agno, bucket);
-	return NULLAGINO;
+	if (prev_ip) {
+		int	error2;
+
+		ip->i_prev_unlinked = prev_agino;
+		xfs_irele(prev_ip);
+
+		error2 = xfs_inodegc_flush(mp);
+		if (error2 && !error)
+			return error2;
+	}
+	return error;
 }
 
 /*
@@ -2741,59 +2762,62 @@ xlog_recover_process_one_iunlink(
  * scheduled on this CPU to ensure other scheduled work can run without undue
  * latency.
  */
-STATIC void
-xlog_recover_process_iunlinks(
-	struct xlog	*log)
+static void
+xlog_recover_iunlink_ag(
+	struct xfs_perag	*pag)
 {
-	struct xfs_mount	*mp = log->l_mp;
-	struct xfs_perag	*pag;
-	xfs_agnumber_t		agno;
 	struct xfs_agi		*agi;
 	struct xfs_buf		*agibp;
-	xfs_agino_t		agino;
 	int			bucket;
 	int			error;
 
-	for_each_perag(mp, agno, pag) {
-		error = xfs_read_agi(mp, NULL, pag->pag_agno, &agibp);
-		if (error) {
-			/*
-			 * AGI is b0rked. Don't process it.
-			 *
-			 * We should probably mark the filesystem as corrupt
-			 * after we've recovered all the ag's we can....
-			 */
-			continue;
-		}
+	error = xfs_read_agi(pag, NULL, &agibp);
+	if (error) {
 		/*
-		 * Unlock the buffer so that it can be acquired in the normal
-		 * course of the transaction to truncate and free each inode.
-		 * Because we are not racing with anyone else here for the AGI
-		 * buffer, we don't even need to hold it locked to read the
-		 * initial unlinked bucket entries out of the buffer. We keep
-		 * buffer reference though, so that it stays pinned in memory
-		 * while we need the buffer.
+		 * AGI is b0rked. Don't process it.
+		 *
+		 * We should probably mark the filesystem as corrupt after we've
+		 * recovered all the ag's we can....
 		 */
-		agi = agibp->b_addr;
-		xfs_buf_unlock(agibp);
-
-		for (bucket = 0; bucket < XFS_AGI_UNLINKED_BUCKETS; bucket++) {
-			agino = be32_to_cpu(agi->agi_unlinked[bucket]);
-			while (agino != NULLAGINO) {
-				agino = xlog_recover_process_one_iunlink(mp,
-						pag->pag_agno, agino, bucket);
-				cond_resched();
-			}
-		}
-		xfs_buf_rele(agibp);
+		return;
 	}
 
 	/*
-	 * Flush the pending unlinked inodes to ensure that the inactivations
-	 * are fully completed on disk and the incore inodes can be reclaimed
-	 * before we signal that recovery is complete.
+	 * Unlock the buffer so that it can be acquired in the normal course of
+	 * the transaction to truncate and free each inode.  Because we are not
+	 * racing with anyone else here for the AGI buffer, we don't even need
+	 * to hold it locked to read the initial unlinked bucket entries out of
+	 * the buffer. We keep buffer reference though, so that it stays pinned
+	 * in memory while we need the buffer.
 	 */
-	xfs_inodegc_flush(mp);
+	agi = agibp->b_addr;
+	xfs_buf_unlock(agibp);
+
+	for (bucket = 0; bucket < XFS_AGI_UNLINKED_BUCKETS; bucket++) {
+		error = xlog_recover_iunlink_bucket(pag, agi, bucket);
+		if (error) {
+			/*
+			 * Bucket is unrecoverable, so only a repair scan can
+			 * free the remaining unlinked inodes. Just empty the
+			 * bucket and remaining inodes on it unreferenced and
+			 * unfreeable.
+			 */
+			xlog_recover_clear_agi_bucket(pag, bucket);
+		}
+	}
+
+	xfs_buf_rele(agibp);
+}
+
+static void
+xlog_recover_process_iunlinks(
+	struct xlog	*log)
+{
+	struct xfs_perag	*pag;
+	xfs_agnumber_t		agno;
+
+	for_each_perag(log->l_mp, agno, pag)
+		xlog_recover_iunlink_ag(pag);
 }
 
 STATIC void
@@ -3313,7 +3337,8 @@ xlog_do_recover(
 	/* re-initialise in-core superblock and geometry structures */
 	mp->m_features |= xfs_sb_version_to_features(sbp);
 	xfs_reinit_percpu_counters(mp);
-	error = xfs_initialize_perag(mp, sbp->sb_agcount, &mp->m_maxagi);
+	error = xfs_initialize_perag(mp, sbp->sb_agcount, sbp->sb_dblocks,
+			&mp->m_maxagi);
 	if (error) {
 		xfs_warn(mp, "Failed post-recovery per-ag init: %d", error);
 		return error;

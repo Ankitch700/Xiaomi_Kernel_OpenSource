@@ -144,11 +144,9 @@ static ssize_t boot_acl_show(struct device *dev, struct device_attribute *attr,
 
 	for (ret = 0, i = 0; i < tb->nboot_acl; i++) {
 		if (!uuid_is_null(&uuids[i]))
-			ret += scnprintf(buf + ret, PAGE_SIZE - ret, "%pUb",
-					&uuids[i]);
+			ret += sysfs_emit_at(buf, ret, "%pUb", &uuids[i]);
 
-		ret += scnprintf(buf + ret, PAGE_SIZE - ret, "%s",
-			       i < tb->nboot_acl - 1 ? "," : "\n");
+		ret += sysfs_emit_at(buf, ret, "%s", i < tb->nboot_acl - 1 ? "," : "\n");
 	}
 
 out:
@@ -247,7 +245,7 @@ static ssize_t deauthorization_show(struct device *dev,
 	    tb->security_level == TB_SECURITY_SECURE)
 		deauthorization = !!tb->cm_ops->disapprove_switch;
 
-	return sprintf(buf, "%d\n", deauthorization);
+	return sysfs_emit(buf, "%d\n", deauthorization);
 }
 static DEVICE_ATTR_RO(deauthorization);
 
@@ -270,7 +268,7 @@ static ssize_t security_show(struct device *dev, struct device_attribute *attr,
 	if (tb->security_level < ARRAY_SIZE(tb_security_names))
 		name = tb_security_names[tb->security_level];
 
-	return sprintf(buf, "%s\n", name);
+	return sysfs_emit(buf, "%s\n", name);
 }
 static DEVICE_ATTR_RO(security);
 
@@ -425,6 +423,7 @@ err_free:
 /**
  * tb_domain_add() - Add domain to the system
  * @tb: Domain to add
+ * @reset: Issue reset to the host router
  *
  * Starts the domain and adds it to the system. Hotplugging devices will
  * work after this has been returned successfully. In order to remove
@@ -433,7 +432,7 @@ err_free:
  *
  * Return: %0 in case of success and negative errno in case of error
  */
-int tb_domain_add(struct tb *tb)
+int tb_domain_add(struct tb *tb, bool reset)
 {
 	int ret;
 
@@ -462,7 +461,7 @@ int tb_domain_add(struct tb *tb)
 
 	/* Start the domain */
 	if (tb->cm_ops->start) {
-		ret = tb->cm_ops->start(tb);
+		ret = tb->cm_ops->start(tb, reset);
 		if (ret)
 			goto err_domain_del;
 	}
@@ -872,7 +871,6 @@ int tb_domain_init(void)
 {
 	int ret;
 
-	tb_test_init();
 	tb_debugfs_init();
 	tb_acpi_init();
 
@@ -890,7 +888,6 @@ err_xdomain:
 err_acpi:
 	tb_acpi_exit();
 	tb_debugfs_exit();
-	tb_test_exit();
 
 	return ret;
 }
@@ -903,5 +900,4 @@ void tb_domain_exit(void)
 	tb_xdomain_exit();
 	tb_acpi_exit();
 	tb_debugfs_exit();
-	tb_test_exit();
 }

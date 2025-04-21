@@ -20,8 +20,10 @@
 #include <linux/platform_data/syscon.h>
 #include <linux/platform_device.h>
 #include <linux/regmap.h>
+#include <linux/reset.h>
 #include <linux/mfd/syscon.h>
 #include <linux/slab.h>
+#include <trace/hooks/regmap.h>
 
 static struct platform_driver syscon_driver;
 
@@ -31,6 +33,7 @@ static LIST_HEAD(syscon_list);
 struct syscon {
 	struct device_node *np;
 	struct regmap *regmap;
+	struct reset_control *reset;
 	struct list_head list;
 };
 
@@ -40,7 +43,7 @@ static const struct regmap_config syscon_regmap_config = {
 	.reg_stride = 4,
 };
 
-static struct syscon *of_syscon_register(struct device_node *np, bool check_clk)
+static struct syscon *of_syscon_register(struct device_node *np, bool check_res)
 {
 	struct clk *clk;
 	struct syscon *syscon;
@@ -50,6 +53,7 @@ static struct syscon *of_syscon_register(struct device_node *np, bool check_clk)
 	int ret;
 	struct regmap_config syscon_config = syscon_regmap_config;
 	struct resource res;
+	struct reset_control *reset;
 
 	syscon = kzalloc(sizeof(*syscon), GFP_KERNEL);
 	if (!syscon)
@@ -101,8 +105,11 @@ static struct syscon *of_syscon_register(struct device_node *np, bool check_clk)
 		}
 	}
 
-	syscon_config.name = kasprintf(GFP_KERNEL, "%pOFn@%llx", np,
-				       (u64)res.start);
+	syscon_config.name = kasprintf(GFP_KERNEL, "%pOFn@%pa", np, &res.start);
+	if (!syscon_config.name) {
+		ret = -ENOMEM;
+		goto err_regmap;
+	}
 	syscon_config.reg_stride = reg_io_width;
 	syscon_config.val_bits = reg_io_width * 8;
 	syscon_config.max_register = resource_size(&res) - reg_io_width;
@@ -115,7 +122,7 @@ static struct syscon *of_syscon_register(struct device_node *np, bool check_clk)
 		goto err_regmap;
 	}
 
-	if (check_clk) {
+	if (check_res) {
 		clk = of_clk_get(np, 0);
 		if (IS_ERR(clk)) {
 			ret = PTR_ERR(clk);
@@ -125,10 +132,21 @@ static struct syscon *of_syscon_register(struct device_node *np, bool check_clk)
 		} else {
 			ret = regmap_mmio_attach_clk(regmap, clk);
 			if (ret)
-				goto err_attach;
+				goto err_attach_clk;
 		}
+
+		reset = of_reset_control_get_optional_exclusive(np, NULL);
+		if (IS_ERR(reset)) {
+			ret = PTR_ERR(reset);
+			goto err_attach_clk;
+		}
+
+		ret = reset_control_deassert(reset);
+		if (ret)
+			goto err_reset;
 	}
 
+	trace_android_vh_regmap_update(&syscon_config, regmap);
 	syscon->regmap = regmap;
 	syscon->np = np;
 
@@ -138,7 +156,9 @@ static struct syscon *of_syscon_register(struct device_node *np, bool check_clk)
 
 	return syscon;
 
-err_attach:
+err_reset:
+	reset_control_put(reset);
+err_attach_clk:
 	if (!IS_ERR(clk))
 		clk_put(clk);
 err_clk:
@@ -151,7 +171,7 @@ err_map:
 }
 
 static struct regmap *device_node_get_regmap(struct device_node *np,
-					     bool check_clk)
+					     bool check_res)
 {
 	struct syscon *entry, *syscon = NULL;
 
@@ -166,7 +186,7 @@ static struct regmap *device_node_get_regmap(struct device_node *np,
 	spin_unlock(&syscon_list_slock);
 
 	if (!syscon)
-		syscon = of_syscon_register(np, check_clk);
+		syscon = of_syscon_register(np, check_res);
 
 	if (IS_ERR(syscon))
 		return ERR_CAST(syscon);
@@ -220,7 +240,9 @@ struct regmap *syscon_regmap_lookup_by_phandle(struct device_node *np,
 		return ERR_PTR(-ENODEV);
 
 	regmap = syscon_node_to_regmap(syscon_np);
-	of_node_put(syscon_np);
+
+	if (property)
+		of_node_put(syscon_np);
 
 	return regmap;
 }

@@ -14,7 +14,7 @@ crypto_algapi-y := algapi.o scatterwalk.o $(crypto_algapi-y)
 obj-$(CONFIG_CRYPTO_ALGAPI2) += crypto_algapi.o
 
 obj-$(CONFIG_CRYPTO_AEAD2) += aead.o
-obj-$(CONFIG_CRYPTO_AEAD2) += geniv.o
+obj-$(CONFIG_CRYPTO_GENIV) += geniv.o
 
 obj-$(CONFIG_CRYPTO_SKCIPHER2) += skcipher.o
 obj-$(CONFIG_CRYPTO_SEQIV) += seqiv.o
@@ -25,6 +25,7 @@ crypto_hash-y += shash.o
 obj-$(CONFIG_CRYPTO_HASH2) += crypto_hash.o
 
 obj-$(CONFIG_CRYPTO_AKCIPHER2) += akcipher.o
+obj-$(CONFIG_CRYPTO_SIG2) += sig.o
 obj-$(CONFIG_CRYPTO_KPP2) += kpp.o
 
 dh_generic-y := dh.o
@@ -84,8 +85,7 @@ obj-$(CONFIG_CRYPTO_STREEBOG) += streebog_generic.o
 obj-$(CONFIG_CRYPTO_WP512) += wp512.o
 CFLAGS_wp512.o := $(call cc-option,-fno-schedule-insns)  # https://gcc.gnu.org/bugzilla/show_bug.cgi?id=79149
 obj-$(CONFIG_CRYPTO_BLAKE2B) += blake2b_generic.o
-obj-$(CONFIG_CRYPTO_BLAKE2S) += blake2s_generic.o
-obj-$(CONFIG_CRYPTO_GF128MUL) += gf128mul.o
+CFLAGS_blake2b_generic.o := -Wframe-larger-than=4096 #  https://gcc.gnu.org/bugzilla/show_bug.cgi?id=105930
 obj-$(CONFIG_CRYPTO_ECB) += ecb.o
 obj-$(CONFIG_CRYPTO_CBC) += cbc.o
 obj-$(CONFIG_CRYPTO_CFB) += cfb.o
@@ -94,6 +94,8 @@ obj-$(CONFIG_CRYPTO_CTS) += cts.o
 obj-$(CONFIG_CRYPTO_LRW) += lrw.o
 obj-$(CONFIG_CRYPTO_XTS) += xts.o
 obj-$(CONFIG_CRYPTO_CTR) += ctr.o
+obj-$(CONFIG_CRYPTO_XCTR) += xctr.o
+obj-$(CONFIG_CRYPTO_HCTR2) += hctr2.o
 obj-$(CONFIG_CRYPTO_KEYWRAP) += keywrap.o
 obj-$(CONFIG_CRYPTO_ADIANTUM) += adiantum.o
 obj-$(CONFIG_CRYPTO_NHPOLY1305) += nhpoly1305.o
@@ -147,6 +149,7 @@ obj-$(CONFIG_CRYPTO_TEA) += tea.o
 obj-$(CONFIG_CRYPTO_KHAZAD) += khazad.o
 obj-$(CONFIG_CRYPTO_ANUBIS) += anubis.o
 obj-$(CONFIG_CRYPTO_SEED) += seed.o
+obj-$(CONFIG_CRYPTO_ARIA) += aria_generic.o
 obj-$(CONFIG_CRYPTO_CHACHA20) += chacha_generic.o
 obj-$(CONFIG_CRYPTO_POLY1305) += poly1305_generic.o
 obj-$(CONFIG_CRYPTO_DEFLATE) += deflate.o
@@ -169,8 +172,10 @@ CFLAGS_jitterentropy.o = -O0
 KASAN_SANITIZE_jitterentropy.o = n
 UBSAN_SANITIZE_jitterentropy.o = n
 jitterentropy_rng-y := jitterentropy.o jitterentropy-kcapi.o
+obj-$(CONFIG_CRYPTO_JITTERENTROPY_TESTINTERFACE) += jitterentropy-testing.o
 obj-$(CONFIG_CRYPTO_TEST) += tcrypt.o
 obj-$(CONFIG_CRYPTO_GHASH) += ghash-generic.o
+obj-$(CONFIG_CRYPTO_POLYVAL) += polyval-generic.o
 obj-$(CONFIG_CRYPTO_USER_API) += af_alg.o
 obj-$(CONFIG_CRYPTO_USER_API_HASH) += algif_hash.o
 obj-$(CONFIG_CRYPTO_USER_API_SKCIPHER) += algif_skcipher.o
@@ -208,3 +213,57 @@ obj-$(CONFIG_CRYPTO_SIMD) += crypto_simd.o
 # Key derivation function
 #
 obj-$(CONFIG_CRYPTO_KDF800108_CTR) += kdf_sp800108.o
+
+ifneq ($(CONFIG_CRYPTO_FIPS140_MOD),)
+
+FIPS140_CFLAGS := -DBUILD_FIPS140_KO -include $(srctree)/crypto/fips140-defs.h
+
+CFLAGS_jitterentropy-fips.o := -O0
+KASAN_SANITIZE_jitterentropy-fips.o = n
+UBSAN_SANITIZE_jitterentropy-fips.o = n
+
+# Compile an extra copy of various crypto algorithms into the fips140 module.
+#
+# Note: the module will still work if some files are removed from here.
+# However, it may affect FIPS certifiability.  Don't remove files from here
+# without considering impact on FIPS certifiability.
+
+crypto-fips-objs := drbg.o ecb.o cbc.o ctr.o cts.o gcm.o xts.o hmac.o cmac.o \
+		    aes_generic.o \
+		    jitterentropy.o jitterentropy-kcapi.o \
+		    sha1_generic.o sha256_generic.o sha512_generic.o \
+		    sha3_generic.o \
+		    lib-crypto-aes.o lib-crypto-gf128mul.o lib-crypto-memneq.o \
+		    lib-crypto-sha1.o lib-crypto-sha256.o lib-crypto-utils.o
+crypto-fips-objs := $(foreach o,$(crypto-fips-objs),$(o:.o=-fips.o))
+
+# get the arch to add its objects to $(crypto-fips-objs)
+include $(srctree)/arch/$(ARCH)/crypto/Kbuild.fips140
+
+$(obj)/%-fips.o: KBUILD_CFLAGS += $(FIPS140_CFLAGS)
+$(obj)/%-fips.o: $(src)/%.c FORCE
+	$(call if_changed_rule,cc_o_c)
+$(obj)/lib-%-fips.o: $(srctree)/lib/%.c FORCE
+	$(call if_changed_rule,cc_o_c)
+$(obj)/lib-crypto-%-fips.o: $(srctree)/lib/crypto/%.c FORCE
+	$(call if_changed_rule,cc_o_c)
+
+fips140-objs := \
+	fips140-alg-registration.o \
+	fips140-module.o \
+	fips140-refs.o \
+	fips140-selftests.o \
+	$(crypto-fips-objs)
+fips140-$(CONFIG_CRYPTO_FIPS140_MOD_EVAL_TESTING) += \
+	fips140-eval-testing.o
+obj-m += fips140.o
+
+CFLAGS_fips140-alg-registration.o += $(FIPS140_CFLAGS)
+CFLAGS_fips140-module.o += $(FIPS140_CFLAGS)
+CFLAGS_fips140-selftests.o += $(FIPS140_CFLAGS)
+CFLAGS_fips140-eval-testing.o += $(FIPS140_CFLAGS)
+
+hostprogs-always-y := fips140_gen_hmac
+HOSTLDLIBS_fips140_gen_hmac := -lcrypto -lelf
+
+endif

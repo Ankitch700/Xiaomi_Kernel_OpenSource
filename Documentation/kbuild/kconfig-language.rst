@@ -525,8 +525,8 @@ followed by a test macro::
 If you need to expose a compiler capability to makefiles and/or C source files,
 `CC_HAS_` is the recommended prefix for the config option::
 
-  config CC_HAS_ASM_GOTO
-	def_bool $(success,$(srctree)/scripts/gcc-goto.sh $(CC))
+  config CC_HAS_FOO
+	def_bool $(success,$(srctree)/scripts/cc-check-foo.sh $(CC))
 
 Build as module only
 ~~~~~~~~~~~~~~~~~~~~
@@ -572,6 +572,32 @@ above, leading to:
   config FOO
 	bool "Support for foo hardware"
 	depends on ARCH_FOO_VENDOR || COMPILE_TEST
+
+Optional dependencies
+~~~~~~~~~~~~~~~~~~~~~
+
+Some drivers are able to optionally use a feature from another module
+or build cleanly with that module disabled, but cause a link failure
+when trying to use that loadable module from a built-in driver.
+
+The most common way to express this optional dependency in Kconfig logic
+uses the slightly counterintuitive::
+
+  config FOO
+	tristate "Support for foo hardware"
+	depends on BAR || !BAR
+
+This means that there is either a dependency on BAR that disallows
+the combination of FOO=y with BAR=m, or BAR is completely disabled.
+For a more formalized approach if there are multiple drivers that have
+the same dependency, a helper symbol can be used, like::
+
+  config FOO
+	tristate "Support for foo hardware"
+	depends on BAR_OPTIONAL
+
+  config BAR_OPTIONAL
+	def_tristate BAR || !BAR
 
 Kconfig recursive dependency limitations
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -672,7 +698,7 @@ Future kconfig work
 Work on kconfig is welcomed on both areas of clarifying semantics and on
 evaluating the use of a full SAT solver for it. A full SAT solver can be
 desirable to enable more complex dependency mappings and / or queries,
-for instance on possible use case for a SAT solver could be that of handling
+for instance one possible use case for a SAT solver could be that of handling
 the current known recursive dependency issues. It is not known if this would
 address such issues but such evaluation is desirable. If support for a full SAT
 solver proves too complex or that it cannot address recursive dependency issues
