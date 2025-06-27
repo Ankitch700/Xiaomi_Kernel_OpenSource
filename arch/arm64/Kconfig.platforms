@@ -312,6 +312,7 @@ config ARCH_X1E80100
 config ARCH_PARROT
 	bool "Enable Support for Qualcomm Technologies, Inc. PARROT"
 	depends on ARCH_QCOM
+	select GUNYAH_LEGACY
 	help
 	  This enables support for the Qualcomm Technologies, Inc.'s
 	  PARROT chipset. If you do not wish to build a kernel that
@@ -408,14 +409,6 @@ config ARCH_SPRD
 	bool "Spreadtrum SoC platform"
 	help
 	  Support for Spreadtrum ARM based SoCs
-
-config ARCH_SM6150
-       bool "Enable Support for Qualcomm Technologies, Inc. SM6150"
-       depends on ARCH_QCOM
-       help
-         This enables support for the Qualcomm Technologies, Inc.'s
-         SM6150 chipset. If you do not wish to build a kernel that
-         runs on this chipset or if you are unsure, say 'N' here.
 
 config ARCH_THUNDER
 	bool "Cavium Inc. Thunder SoC Family"

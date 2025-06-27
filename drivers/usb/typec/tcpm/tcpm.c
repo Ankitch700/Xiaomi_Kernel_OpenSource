@@ -305,17 +305,6 @@ struct pd_data {
 	unsigned int operating_snk_mw;
 };
 
-/*
- * @sink_wait_cap_time: Deadline (in ms) for tTypeCSinkWaitCap timer
- * @ps_src_wait_off_time: Deadline (in ms) for tPSSourceOff timer
- * @cc_debounce_time: Deadline (in ms) for tCCDebounce timer
- */
-struct pd_timings {
-	u32 sink_wait_cap_time;
-	u32 ps_src_off_time;
-	u32 cc_debounce_time;
-};
-
 struct tcpm_port {
 	struct device *dev;
 
@@ -515,9 +504,6 @@ struct tcpm_port {
 	 * transitions.
 	 */
 	bool potential_contaminant;
-
-	/* Timer deadline values configured at runtime */
-	struct pd_timings timings;
 #ifdef CONFIG_DEBUG_FS
 	struct dentry *dentry;
 	struct mutex logbuffer_lock;	/* log buffer access lock */
@@ -3981,15 +3967,15 @@ static void run_state_machine(struct tcpm_port *port)
 	case SRC_ATTACH_WAIT:
 		if (tcpm_port_is_debug(port))
 			tcpm_set_state(port, DEBUG_ACC_ATTACHED,
-				       port->timings.cc_debounce_time);
+				       PD_T_CC_DEBOUNCE);
 		else if (tcpm_port_is_audio(port))
 			tcpm_set_state(port, AUDIO_ACC_ATTACHED,
-				       port->timings.cc_debounce_time);
+				       PD_T_CC_DEBOUNCE);
 		else if (tcpm_port_is_source(port) && port->vbus_vsafe0v)
 			tcpm_set_state(port,
 				       tcpm_try_snk(port) ? SNK_TRY
 							  : SRC_ATTACHED,
-				       port->timings.cc_debounce_time);
+				       PD_T_CC_DEBOUNCE);
 		break;
 
 	case SNK_TRY:
@@ -4040,8 +4026,7 @@ static void run_state_machine(struct tcpm_port *port)
 		}
 		break;
 	case SRC_TRYWAIT_DEBOUNCE:
-		tcpm_set_state(port, SRC_ATTACHED,
-			       port->timings.cc_debounce_time);
+		tcpm_set_state(port, SRC_ATTACHED, PD_T_CC_DEBOUNCE);
 		break;
 	case SRC_TRYWAIT_UNATTACHED:
 		tcpm_set_state(port, SNK_UNATTACHED, 0);
@@ -4228,7 +4213,7 @@ static void run_state_machine(struct tcpm_port *port)
 		    (port->cc1 != TYPEC_CC_OPEN &&
 		     port->cc2 == TYPEC_CC_OPEN))
 			tcpm_set_state(port, SNK_DEBOUNCED,
-				       port->timings.cc_debounce_time);
+				       PD_T_CC_DEBOUNCE);
 		else if (tcpm_port_is_disconnected(port))
 			tcpm_set_state(port, SNK_UNATTACHED,
 				       PD_T_PD_DEBOUNCE);
@@ -4268,8 +4253,7 @@ static void run_state_machine(struct tcpm_port *port)
 		break;
 	case SNK_TRYWAIT:
 		tcpm_set_cc(port, TYPEC_CC_RD);
-		tcpm_set_state(port, SNK_TRYWAIT_VBUS,
-			       port->timings.cc_debounce_time);
+		tcpm_set_state(port, SNK_TRYWAIT_VBUS, PD_T_CC_DEBOUNCE);
 		break;
 	case SNK_TRYWAIT_VBUS:
 		/*
@@ -4339,7 +4323,7 @@ static void run_state_machine(struct tcpm_port *port)
 		break;
 	case SNK_DISCOVERY_DEBOUNCE:
 		tcpm_set_state(port, SNK_DISCOVERY_DEBOUNCE_DONE,
-			       port->timings.cc_debounce_time);
+			       PD_T_CC_DEBOUNCE);
 		break;
 	case SNK_DISCOVERY_DEBOUNCE_DONE:
 		if (!tcpm_port_is_disconnected(port) &&
@@ -4366,10 +4350,10 @@ static void run_state_machine(struct tcpm_port *port)
 		if (port->vbus_never_low) {
 			port->vbus_never_low = false;
 			tcpm_set_state(port, SNK_SOFT_RESET,
-				       port->timings.sink_wait_cap_time);
+				       PD_T_SINK_WAIT_CAP);
 		} else {
 			tcpm_set_state(port, hard_reset_state(port),
-				       port->timings.sink_wait_cap_time);
+				       PD_T_SINK_WAIT_CAP);
 		}
 		break;
 	case SNK_NEGOTIATE_CAPABILITIES:
@@ -4497,8 +4481,7 @@ static void run_state_machine(struct tcpm_port *port)
 			tcpm_set_state(port, ACC_UNATTACHED, 0);
 		break;
 	case AUDIO_ACC_DEBOUNCE:
-		tcpm_set_state(port, ACC_UNATTACHED,
-			       port->timings.cc_debounce_time);
+		tcpm_set_state(port, ACC_UNATTACHED, PD_T_CC_DEBOUNCE);
 		break;
 
 	/* Hard_Reset states */
@@ -4694,8 +4677,7 @@ static void run_state_machine(struct tcpm_port *port)
 		tcpm_set_state(port, ERROR_RECOVERY, 0);
 		break;
 	case FR_SWAP_SNK_SRC_TRANSITION_TO_OFF:
-		tcpm_set_state(port, ERROR_RECOVERY,
-			       port->timings.ps_src_off_time);
+		tcpm_set_state(port, ERROR_RECOVERY, PD_T_PS_SOURCE_OFF);
 		break;
 	case FR_SWAP_SNK_SRC_NEW_SINK_READY:
 		if (port->vbus_source)
@@ -4750,7 +4732,7 @@ static void run_state_machine(struct tcpm_port *port)
 		tcpm_set_cc(port, TYPEC_CC_RD);
 		/* allow CC debounce */
 		tcpm_set_state(port, PR_SWAP_SRC_SNK_SOURCE_OFF_CC_DEBOUNCED,
-			       port->timings.cc_debounce_time);
+			       PD_T_CC_DEBOUNCE);
 		break;
 	case PR_SWAP_SRC_SNK_SOURCE_OFF_CC_DEBOUNCED:
 		/*
@@ -4785,7 +4767,7 @@ static void run_state_machine(struct tcpm_port *port)
 						       port->pps_data.active, 0);
 		tcpm_set_charge(port, false);
 		tcpm_set_state(port, hard_reset_state(port),
-			       port->timings.ps_src_off_time);
+			       PD_T_PS_SOURCE_OFF);
 		break;
 	case PR_SWAP_SNK_SRC_SOURCE_ON:
 		tcpm_enable_auto_vbus_discharge(port, true);
@@ -4921,7 +4903,7 @@ static void run_state_machine(struct tcpm_port *port)
 	case PORT_RESET_WAIT_OFF:
 		tcpm_set_state(port,
 			       tcpm_default_state(port),
-			       port->vbus_present ? port->timings.ps_src_off_time : 0);
+			       port->vbus_present ? PD_T_PS_SOURCE_OFF : 0);
 		break;
 
 	/* AMS intermediate state */
@@ -5403,7 +5385,7 @@ static void _tcpm_pd_vbus_vsafe0v(struct tcpm_port *port)
 	case SRC_ATTACH_WAIT:
 		if (tcpm_port_is_source(port))
 			tcpm_set_state(port, tcpm_try_snk(port) ? SNK_TRY : SRC_ATTACHED,
-				       port->timings.cc_debounce_time);
+				       PD_T_CC_DEBOUNCE);
 		break;
 	case SRC_STARTUP:
 	case SRC_SEND_CAPABILITIES:
@@ -6283,30 +6265,6 @@ err_unregister:
 	return ret;
 }
 
-static void tcpm_fw_get_timings(struct tcpm_port *port, struct fwnode_handle *fwnode)
-{
-	int ret;
-	u32 val;
-
-	ret = fwnode_property_read_u32(fwnode, "sink-wait-cap-time-ms", &val);
-	if (!ret)
-		port->timings.sink_wait_cap_time = val;
-	else
-		port->timings.sink_wait_cap_time = PD_T_SINK_WAIT_CAP;
-
-	ret = fwnode_property_read_u32(fwnode, "ps-source-off-time-ms", &val);
-	if (!ret)
-		port->timings.ps_src_off_time = val;
-	else
-		port->timings.ps_src_off_time = PD_T_PS_SOURCE_OFF;
-
-	ret = fwnode_property_read_u32(fwnode, "cc-debounce-time-ms", &val);
-	if (!ret)
-		port->timings.cc_debounce_time = val;
-	else
-		port->timings.cc_debounce_time = PD_T_CC_DEBOUNCE;
-}
-
 static int tcpm_fw_get_caps(struct tcpm_port *port, struct fwnode_handle *fwnode)
 {
 	struct fwnode_handle *capabilities, *child, *caps = NULL;
@@ -6868,8 +6826,6 @@ struct tcpm_port *tcpm_register_port(struct device *dev, struct tcpc_dev *tcpc)
 	err = tcpm_fw_get_snk_vdos(port, tcpc->fwnode);
 	if (err < 0)
 		goto out_destroy_wq;
-
-	tcpm_fw_get_timings(port, tcpc->fwnode);
 
 	port->try_role = port->typec_caps.prefer_role;
 

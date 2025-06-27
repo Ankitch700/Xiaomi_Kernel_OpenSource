@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2024-2025, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2024, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/clk.h>
@@ -686,7 +686,6 @@ static const struct clk_parent_data cam_cc_parent_data_8[] = {
 };
 
 static const struct freq_tbl ftbl_cam_cc_camnoc_rt_axi_clk_src[] = {
-	F(19200000, P_BI_TCXO, 1, 0, 0),
 	F(200000000, P_CAM_CC_PLL0_OUT_EVEN, 3, 0, 0),
 	F(300000000, P_CAM_CC_PLL0_OUT_EVEN, 2, 0, 0),
 	F(400000000, P_CAM_CC_PLL0_OUT_ODD, 1, 0, 0),

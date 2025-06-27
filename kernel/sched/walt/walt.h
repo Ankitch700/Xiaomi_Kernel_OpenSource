@@ -390,6 +390,7 @@ extern unsigned int sysctl_ed_boost_pct;
 extern unsigned int sysctl_em_inflate_pct;
 extern unsigned int sysctl_em_inflate_thres;
 extern unsigned int sysctl_sched_heavy_nr;
+extern unsigned int sysctl_sched_storage_boost_disable;
 
 extern int cpufreq_walt_set_adaptive_freq(unsigned int cpu, unsigned int adaptive_level_1,
 					  unsigned int adaptive_low_freq,
@@ -777,6 +778,8 @@ static inline enum sched_boost_policy task_boost_policy(struct task_struct *p)
 			policy = SCHED_BOOST_NONE;
 		if (sched_boost_type == BALANCE_BOOST &&
 			task_util(p) <= sysctl_sched_min_task_util_for_boost)
+			policy = SCHED_BOOST_NONE;
+		if (is_storage_boost() && sysctl_sched_storage_boost_disable)
 			policy = SCHED_BOOST_NONE;
 	}
 
@@ -1381,6 +1384,7 @@ extern bool now_is_sbt;
 extern bool is_sbt_or_oscillate(void);
 
 extern unsigned int sysctl_sched_walt_core_util[WALT_NR_CPUS];
+extern unsigned int sysctl_disable_minfreq_pause;
 extern unsigned int sysctl_pipeline_busy_boost_pct;
 
 enum WALT_DEBUG_FEAT {
@@ -1494,6 +1498,7 @@ extern int sched_smart_freq_legacy_dump_handler(struct ctl_table *table, int wri
 					      void __user *buffer, size_t *lenp, loff_t *ppos);
 extern int sched_smart_freq_ipc_dump_handler(struct ctl_table *table, int write,
 					   void __user *buffer, size_t *lenp, loff_t *ppos);
+extern struct task_struct *sched_lib_task_struct;
 extern unsigned int sysctl_ipc_freq_levels_cluster0[SMART_FMAX_IPC_MAX];
 extern unsigned int sysctl_ipc_freq_levels_cluster1[SMART_FMAX_IPC_MAX];
 extern unsigned int sysctl_ipc_freq_levels_cluster2[SMART_FMAX_IPC_MAX];

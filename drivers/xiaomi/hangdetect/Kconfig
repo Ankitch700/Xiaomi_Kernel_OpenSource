@@ -1,0 +1,9 @@
+config MI_HANG_DETECT
+	tristate "hang detect monitor"
+	help
+	  qcom platform hang detect.
+
+config MI_HANG_DETECT_LOG
+	bool "hang detect debug log"
+	help
+	  if you select this option, print debug hang log to kernel log.

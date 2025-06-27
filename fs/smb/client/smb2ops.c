@@ -238,9 +238,11 @@ smb2_wait_mtu_credits(struct TCP_Server_Info *server, unsigned int size,
 		if (server->credits <= 0) {
 			spin_unlock(&server->req_lock);
 			cifs_num_waiters_inc(server);
+			cifs_dbg(FYI, "before wait, num_waiters=%d, jiffies=%lu\n", (server->num_waiters).counter, jiffies);
 			rc = wait_event_killable(server->request_q,
 				has_credits(server, &server->credits, 1));
 			cifs_num_waiters_dec(server);
+			cifs_dbg(FYI, "after wait, num_waiters=%d, jiffies=%lu\n", (server->num_waiters).counter, jiffies);
 			if (rc)
 				return rc;
 			spin_lock(&server->req_lock);
@@ -4250,7 +4252,7 @@ smb2_get_enc_key(struct TCP_Server_Info *server, __u64 ses_id, int enc, u8 *key)
  */
 static int
 crypt_message(struct TCP_Server_Info *server, int num_rqst,
-	      struct smb_rqst *rqst, int enc, struct crypto_aead *tfm)
+	      struct smb_rqst *rqst, int enc)
 {
 	struct smb2_transform_hdr *tr_hdr =
 		(struct smb2_transform_hdr *)rqst[0].rq_iov[0].iov_base;
@@ -4261,6 +4263,8 @@ crypt_message(struct TCP_Server_Info *server, int num_rqst,
 	u8 key[SMB3_ENC_DEC_KEY_SIZE];
 	struct aead_request *req;
 	u8 *iv;
+	DECLARE_CRYPTO_WAIT(wait);
+	struct crypto_aead *tfm;
 	unsigned int crypt_len = le32_to_cpu(tr_hdr->OriginalMessageSize);
 	void *creq;
 	size_t sensitive_size;
@@ -4271,6 +4275,14 @@ crypt_message(struct TCP_Server_Info *server, int num_rqst,
 			 enc ? "en" : "de", le64_to_cpu(tr_hdr->SessionId));
 		return rc;
 	}
+
+	rc = smb3_crypto_aead_allocate(server);
+	if (rc) {
+		cifs_server_dbg(VFS, "%s: crypto alloc failed\n", __func__);
+		return rc;
+	}
+
+	tfm = enc ? server->secmech.enc : server->secmech.dec;
 
 	if ((server->cipher_type == SMB2_ENCRYPTION_AES256_CCM) ||
 		(server->cipher_type == SMB2_ENCRYPTION_AES256_GCM))
@@ -4311,7 +4323,11 @@ crypt_message(struct TCP_Server_Info *server, int num_rqst,
 	aead_request_set_crypt(req, sg, sg, crypt_len, iv);
 	aead_request_set_ad(req, assoc_data_len);
 
-	rc = enc ? crypto_aead_encrypt(req) : crypto_aead_decrypt(req);
+	aead_request_set_callback(req, CRYPTO_TFM_REQ_MAY_BACKLOG,
+				  crypto_req_done, &wait);
+
+	rc = crypto_wait_req(enc ? crypto_aead_encrypt(req)
+				: crypto_aead_decrypt(req), &wait);
 
 	if (!rc && enc)
 		memcpy(&tr_hdr->Signature, sign, SMB2_SIGNATURE_SIZE);
@@ -4418,7 +4434,7 @@ smb3_init_transform_rq(struct TCP_Server_Info *server, int num_rqst,
 	/* fill the 1st iov with a transform header */
 	fill_transform_hdr(tr_hdr, orig_len, old_rq, server->cipher_type);
 
-	rc = crypt_message(server, num_rqst, new_rq, 1, server->secmech.enc);
+	rc = crypt_message(server, num_rqst, new_rq, 1);
 	cifs_dbg(FYI, "Encrypt message returned %d\n", rc);
 	if (rc)
 		goto err_free;
@@ -4443,9 +4459,8 @@ decrypt_raw_data(struct TCP_Server_Info *server, char *buf,
 		 unsigned int buf_data_size, struct iov_iter *iter,
 		 bool is_offloaded)
 {
-	struct crypto_aead *tfm;
-	struct smb_rqst rqst = {NULL};
 	struct kvec iov[2];
+	struct smb_rqst rqst = {NULL};
 	size_t iter_size = 0;
 	int rc;
 
@@ -4462,30 +4477,8 @@ decrypt_raw_data(struct TCP_Server_Info *server, char *buf,
 		iter_size = iov_iter_count(iter);
 	}
 
-	if (is_offloaded) {
-		if ((server->cipher_type == SMB2_ENCRYPTION_AES128_GCM) ||
-		    (server->cipher_type == SMB2_ENCRYPTION_AES256_GCM))
-			tfm = crypto_alloc_aead("gcm(aes)", 0, 0);
-		else
-			tfm = crypto_alloc_aead("ccm(aes)", 0, 0);
-		if (IS_ERR(tfm)) {
-			rc = PTR_ERR(tfm);
-			cifs_server_dbg(VFS, "%s: Failed alloc decrypt TFM, rc=%d\n", __func__, rc);
-
-			return rc;
-		}
-	} else {
-		if (unlikely(!server->secmech.dec))
-			return -EIO;
-
-		tfm = server->secmech.dec;
-	}
-
-	rc = crypt_message(server, 1, &rqst, 0, tfm);
+	rc = crypt_message(server, 1, &rqst, 0);
 	cifs_dbg(FYI, "Decrypt message returned %d\n", rc);
-
-	if (is_offloaded)
-		crypto_free_aead(tfm);
 
 	if (rc)
 		return rc;
@@ -4543,7 +4536,10 @@ handle_read_data(struct TCP_Server_Info *server, struct mid_q_entry *mid,
 	if (server->ops->is_session_expired &&
 	    server->ops->is_session_expired(buf)) {
 		if (!is_offloaded)
+		{
+			cifs_dbg(FYI, "is_session_expired, msec=%u\n", jiffies_to_msecs(jiffies));
 			cifs_reconnect(server, true);
+		}
 		return -1;
 	}
 

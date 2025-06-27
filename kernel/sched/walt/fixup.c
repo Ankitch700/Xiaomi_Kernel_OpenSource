@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2021-2025, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2021-2024, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <trace/hooks/cpufreq.h>
@@ -79,13 +79,15 @@ release_sem:
 	return found;
 }
 
+struct task_struct *sched_lib_task_struct;
 bool is_sched_lib_task(void)
 {
 	if (strnlen(sched_lib_task, LIB_PATH_LENGTH) == 0)
 		return false;
 
-	if (strnstr(current->comm, sched_lib_task, strnlen(current->comm, LIB_PATH_LENGTH)))
+	if (strnstr(current->comm, sched_lib_task, strnlen(current->comm, LIB_PATH_LENGTH))) {
 		return true;
+	}
 
 	return false;
 }

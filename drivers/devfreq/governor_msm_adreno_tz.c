@@ -57,7 +57,6 @@ static DEFINE_SPINLOCK(suspend_lock);
 static u64 suspend_time;
 static u64 suspend_start;
 static unsigned long acc_total, acc_relative_busy;
-
 /*
  * Returns GPU suspend time in millisecond.
  */
@@ -349,10 +348,8 @@ static int tz_get_target_freq(struct devfreq *devfreq, unsigned long *freq)
 	int val, level = 0;
 	int context_count = 0;
 	u64 busy_time;
-
 	if (!priv)
 		return 0;
-
 	/* keeps stats.private_data == NULL   */
 	result = devfreq_update_stats(devfreq);
 	if (result) {
@@ -371,9 +368,6 @@ static int tz_get_target_freq(struct devfreq *devfreq, unsigned long *freq)
 	stats->busy_time = min_t(u64, busy_time, stats->total_time);
 
 	priv->bin.busy_time += stats->busy_time;
-
-	if (stats->private_data)
-		context_count =  *((int *)stats->private_data);
 
 	/* Update the GPU load statistics */
 	compute_work_load(stats, priv, devfreq);

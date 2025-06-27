@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2024-2025, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2024, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/clk.h>
@@ -87,8 +87,9 @@ static struct clk_alpha_pll cam_cc_pll0 = {
 			.vdd_class = &vdd_mx,
 			.num_rate_max = VDD_NUM,
 			.rate_max = (unsigned long[VDD_NUM]) {
-				[VDD_LOWER_D1] = 1100000000,
-				[VDD_LOW] = 1600000000,
+				[VDD_LOWER_D1] = 615000000,
+				[VDD_LOW] = 1100000000,
+				[VDD_LOW_L1] = 1600000000,
 				[VDD_NOMINAL] = 2000000000,
 				[VDD_HIGH_L1] = 2300000000},
 		},
@@ -176,8 +177,9 @@ static struct clk_alpha_pll cam_cc_pll1 = {
 			.vdd_class = &vdd_mx,
 			.num_rate_max = VDD_NUM,
 			.rate_max = (unsigned long[VDD_NUM]) {
-				[VDD_LOWER_D1] = 1100000000,
-				[VDD_LOW] = 1600000000,
+				[VDD_LOWER_D1] = 615000000,
+				[VDD_LOW] = 1100000000,
+				[VDD_LOW_L1] = 1600000000,
 				[VDD_NOMINAL] = 2000000000,
 				[VDD_HIGH_L1] = 2300000000},
 		},
@@ -242,8 +244,9 @@ static struct clk_alpha_pll cam_cc_pll2 = {
 			.vdd_class = &vdd_mx,
 			.num_rate_max = VDD_NUM,
 			.rate_max = (unsigned long[VDD_NUM]) {
-				[VDD_LOWER_D1] = 1100000000,
-				[VDD_LOW] = 1600000000,
+				[VDD_LOWER_D1] = 615000000,
+				[VDD_LOW] = 1100000000,
+				[VDD_LOW_L1] = 1600000000,
 				[VDD_NOMINAL] = 2000000000,
 				[VDD_HIGH_L1] = 2300000000},
 		},
@@ -308,8 +311,9 @@ static struct clk_alpha_pll cam_cc_pll3 = {
 			.vdd_class = &vdd_mx,
 			.num_rate_max = VDD_NUM,
 			.rate_max = (unsigned long[VDD_NUM]) {
-				[VDD_LOWER_D1] = 1100000000,
-				[VDD_LOW] = 1600000000,
+				[VDD_LOWER_D1] = 615000000,
+				[VDD_LOW] = 1100000000,
+				[VDD_LOW_L1] = 1600000000,
 				[VDD_NOMINAL] = 2000000000,
 				[VDD_HIGH_L1] = 2300000000},
 		},
@@ -374,8 +378,9 @@ static struct clk_alpha_pll cam_cc_pll4 = {
 			.vdd_class = &vdd_mx,
 			.num_rate_max = VDD_NUM,
 			.rate_max = (unsigned long[VDD_NUM]) {
-				[VDD_LOWER_D1] = 1100000000,
-				[VDD_LOW] = 1600000000,
+				[VDD_LOWER_D1] = 615000000,
+				[VDD_LOW] = 1100000000,
+				[VDD_LOW_L1] = 1600000000,
 				[VDD_NOMINAL] = 2000000000,
 				[VDD_HIGH_L1] = 2300000000},
 		},
@@ -440,8 +445,9 @@ static struct clk_alpha_pll cam_cc_pll5 = {
 			.vdd_class = &vdd_mx,
 			.num_rate_max = VDD_NUM,
 			.rate_max = (unsigned long[VDD_NUM]) {
-				[VDD_LOWER_D1] = 1100000000,
-				[VDD_LOW] = 1600000000,
+				[VDD_LOWER_D1] = 615000000,
+				[VDD_LOW] = 1100000000,
+				[VDD_LOW_L1] = 1600000000,
 				[VDD_NOMINAL] = 2000000000,
 				[VDD_HIGH_L1] = 2300000000},
 		},
@@ -506,8 +512,9 @@ static struct clk_alpha_pll cam_cc_pll6 = {
 			.vdd_class = &vdd_mx,
 			.num_rate_max = VDD_NUM,
 			.rate_max = (unsigned long[VDD_NUM]) {
-				[VDD_LOWER_D1] = 1100000000,
-				[VDD_LOW] = 1600000000,
+				[VDD_LOWER_D1] = 615000000,
+				[VDD_LOW] = 1100000000,
+				[VDD_LOW_L1] = 1600000000,
 				[VDD_NOMINAL] = 2000000000,
 				[VDD_HIGH_L1] = 2300000000},
 		},
@@ -672,7 +679,6 @@ static const struct clk_parent_data cam_cc_parent_data_8_ao[] = {
 };
 
 static const struct freq_tbl ftbl_cam_cc_camnoc_rt_axi_clk_src[] = {
-	F(19200000, P_BI_TCXO, 1, 0, 0),
 	F(300000000, P_CAM_CC_PLL0_OUT_EVEN, 2, 0, 0),
 	F(400000000, P_CAM_CC_PLL0_OUT_ODD, 1, 0, 0),
 	{ }

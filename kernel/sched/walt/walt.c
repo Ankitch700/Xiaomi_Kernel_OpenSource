@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2025, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2024, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/syscore_ops.h>
@@ -23,6 +23,7 @@
 #include <trace/events/power.h>
 #include "walt.h"
 #include "trace.h"
+
 
 const char *task_event_names[] = {
 	"PUT_PREV_TASK",
@@ -57,6 +58,16 @@ DEFINE_SPINLOCK(enforce_high_irq_cpu_lock);
 DEFINE_PER_CPU(int, enforce_high_irq_cpus_refcount);
 
 DEFINE_PER_CPU(struct walt_rq, walt_rq);
+
+
+// MIUI ADD: Camera_CamSched
+#ifdef CONFIG_MI_CAM_WALT
+typedef u64 (*micam_cpu_cycles_calibration_f)(u64 wallclock, int cpu, u64 cycles_delta);
+static micam_cpu_cycles_calibration_f micam_cpu_cycles_calibration_hook = NULL;
+#endif
+// END Camera_CamSched
+
+
 unsigned int sysctl_sched_user_hint;
 static u64 sched_clock_last;
 static bool walt_clock_suspended;
@@ -367,6 +378,7 @@ static void fixup_walt_sched_stats_common(struct rq *rq, struct task_struct *p,
 
 	fixup_cumulative_runnable_avg(rq, p, &wrq->walt_stats, task_load_delta,
 				      pred_demand_delta);
+
 }
 
 static void rollover_cpu_window(struct rq *rq, bool full_window);
@@ -1149,6 +1161,7 @@ static inline bool is_new_task(struct task_struct *p)
 
 	return wts->active_time < NEW_TASK_ACTIVE_TIME;
 }
+
 static inline int run_walt_irq_work_rollover(u64 old_window_start, struct rq *rq);
 
 static void migrate_busy_time_subtraction(struct task_struct *p, int new_cpu)
@@ -1651,6 +1664,7 @@ static void rollover_task_window(struct task_struct *p, bool full_window)
 		wts->active_time += wrq->prev_window_size;
 }
 
+
 static inline int cpu_is_waiting_on_io(struct rq *rq)
 {
 	if (!sched_io_is_busy)
@@ -1700,11 +1714,13 @@ static inline u64 scale_exec_time(u64 delta, struct rq *rq, struct walt_task_str
 
 	delta = (delta * wrq->task_exec_scale) >> SCHED_CAPACITY_SHIFT;
 
-	if (wts->load_boost && wts->grp)
+	if (wts->load_boost && wts->grp && wts->grp->skip_min)
 		delta = (delta * (1024 + wts->boosted_task_load) >> 10);
 
 	return delta;
 }
+
+
 
 /* Convert busy time to frequency equivalent
  * Assumes load is scaled to 1024
@@ -2432,6 +2448,15 @@ update_task_rq_cpu_cycles(struct task_struct *p, struct rq *rq, int event,
 				wts->cpu_cycles);
 		else
 			cycles_delta = cur_cycles - wts->cpu_cycles;
+
+		// MIUI ADD: Camera_CamSched
+		#ifdef CONFIG_MI_CAM_WALT
+		if (micam_cpu_cycles_calibration_hook != NULL) {
+				cycles_delta = micam_cpu_cycles_calibration_hook(wallclock, cpu, cycles_delta);
+		}
+		#endif
+		// END Camera_CamSched
+
 		cycles_delta = cycles_delta * NSEC_PER_MSEC;
 
 		if (event == IRQ_UPDATE && walt_is_idle_task(p))
@@ -2665,6 +2690,23 @@ out:
 			wallclock, next_ms_boundary, no_boost_reason);
 }
 
+// MIUI ADD: Camera_CamSched
+#ifdef CONFIG_MI_CAM_WALT
+void register_micam_cpu_cycles_calibration_hook(micam_cpu_cycles_calibration_f f)
+{
+	if (likely(f))
+		micam_cpu_cycles_calibration_hook = f;
+}
+EXPORT_SYMBOL_GPL(register_micam_cpu_cycles_calibration_hook);
+
+void unregister_micam_cpu_cycles_calibration_hook(void)
+{
+	micam_cpu_cycles_calibration_hook = NULL;
+}
+EXPORT_SYMBOL_GPL(unregister_micam_cpu_cycles_calibration_hook);
+#endif
+// END Camera_CamSched
+
 /* Reflect task activity on its demand and cpu's busy time statistics */
 static void walt_update_task_ravg(struct task_struct *p, struct rq *rq, int event,
 						u64 wallclock, u64 irqtime)
@@ -2705,6 +2747,7 @@ static void walt_update_task_ravg(struct task_struct *p, struct rq *rq, int even
 	update_cpu_busy_time(p, rq, event, wallclock, irqtime);
 	update_task_pred_demand(rq, p, event);
 	update_busy_bitmap(p, rq, event, wallclock);
+
 	if (event == PUT_PREV_TASK && READ_ONCE(p->__state))
 		wts->iowaited = p->in_iowait;
 
@@ -2731,6 +2774,7 @@ done:
 			waltgov_run_callback(rq, WALT_CPUFREQ_PIPELINE_BUSY_BIT);
 	}
 }
+
 
 static inline void __sched_fork_init(struct task_struct *p)
 {
@@ -2829,10 +2873,12 @@ static void walt_task_dead(struct task_struct *p)
 	if (wts->low_latency & WALT_LOW_LATENCY_PIPELINE_BIT)
 		remove_pipeline(wts);
 
-	remove_heavy(wts);
+    remove_heavy(wts);
 
 	if (p == pipeline_special_task)
 		remove_special_task();
+	if (sched_lib_task_struct == p)
+		sched_lib_task_struct = NULL;
 }
 
 static void mark_task_starting(struct task_struct *p)
@@ -3203,6 +3249,7 @@ static void walt_update_cluster_topology(void)
 		cpumask_andnot(&cpus, &cpus, &cluster_cpus);
 		add_cluster(&cluster_cpus, &new_head);
 	}
+
 
 	align_clusters(&new_head);
 	assign_cluster_ids(&new_head);
@@ -4094,7 +4141,6 @@ static inline void __walt_irq_work_locked(bool is_migration, bool is_asym_migrat
 			} else {
 				wflag |= WALT_CPUFREQ_ROLLOVER_BIT;
 			}
-
 			if (i == num_cpus)
 				waltgov_run_callback(cpu_rq(cpu), wflag);
 			else
@@ -4106,7 +4152,6 @@ static inline void __walt_irq_work_locked(bool is_migration, bool is_asym_migrat
 				walt_update_irqload(rq);
 		}
 	}
-
 	/*
 	 * If the window change request is in pending, good place to
 	 * change sched_ravg_window since all rq locks are acquired.
@@ -4594,6 +4639,7 @@ walt_inc_cumulative_runnable_avg(struct rq *rq, struct task_struct *p)
 
 	fixup_cumulative_runnable_avg(rq, p, &wrq->walt_stats, wts->demand_scaled,
 					wts->pred_demand_scaled);
+
 }
 
 static void
@@ -4605,6 +4651,7 @@ walt_dec_cumulative_runnable_avg(struct rq *rq, struct task_struct *p)
 	fixup_cumulative_runnable_avg(rq, p, &wrq->walt_stats,
 				      -(s64)wts->demand_scaled,
 				      -(s64)wts->pred_demand_scaled);
+
 }
 
 static void android_rvh_wake_up_new_task(void *unused, struct task_struct *new)
@@ -4651,13 +4698,14 @@ static void android_rvh_set_task_cpu(void *unused, struct task_struct *p, unsign
 	if (!cpumask_test_cpu(new_cpu, p->cpus_ptr))
 		WALT_BUG(WALT_BUG_WALT, p, "selecting unaffined cpu=%d comm=%s(%d) affinity=0x%lx",
 			 new_cpu, p->comm, p->pid, (*(cpumask_bits(p->cpus_ptr))));
-
-	if (!p->in_execve &&
-	    is_compat_thread(task_thread_info(p)) &&
-	    !cpumask_test_cpu(new_cpu, system_32bit_el0_cpumask()))
-		WALT_BUG(WALT_BUG_WALT, p,
-			 "selecting non 32 bit cpu=%d comm=%s(%d) 32bit_cpus=0x%lx",
-			 new_cpu, p->comm, p->pid, (*(cpumask_bits(system_32bit_el0_cpumask()))));
+	if (!cpumask_empty(system_32bit_el0_cpumask())) {
+		if (!p->in_execve &&
+			is_compat_thread(task_thread_info(p)) &&
+			!cpumask_test_cpu(new_cpu, system_32bit_el0_cpumask()))
+			WALT_BUG(WALT_BUG_WALT, p,
+				 "selecting non 32 bit cpu=%d comm=%s(%d) 32bit_cpus=0x%lx",
+			          new_cpu, p->comm, p->pid, (*(cpumask_bits(system_32bit_el0_cpumask()))));
+	}
 }
 
 static void android_rvh_new_task_stats(void *unused, struct task_struct *p)
@@ -4761,8 +4809,6 @@ static void android_rvh_enqueue_task(void *unused, struct rq *rq,
 	if (!double_enqueue)
 		walt_inc_cumulative_runnable_avg(rq, p);
 
-
-
 	if ((flags & ENQUEUE_WAKEUP) && walt_flag_test(p, WALT_TRAILBLAZER_BIT)) {
 		waltgov_run_callback(rq, WALT_CPUFREQ_TRAILBLAZER_BIT);
 	} else if (((flags & ENQUEUE_WAKEUP) ||
@@ -4803,6 +4849,7 @@ static void android_rvh_dequeue_task(void *unused, struct rq *rq,
 	struct walt_rq *wrq = &per_cpu(walt_rq, cpu_of(rq));
 	struct walt_task_struct *wts = (struct walt_task_struct *) p->android_vendor_data1;
 	bool double_dequeue = false;
+
 
 	if (unlikely(walt_disabled))
 		return;
@@ -4905,6 +4952,7 @@ static void android_rvh_try_to_wake_up(void *unused, struct task_struct *p)
 	u64 wallclock;
 	unsigned int old_load;
 	struct walt_related_thread_group *grp = NULL;
+
 
 	if (unlikely(walt_disabled))
 		return;
@@ -5126,20 +5174,11 @@ static void android_rvh_schedule(void *unused, struct task_struct *prev,
 {
 	u64 wallclock;
 	struct walt_task_struct *wts = (struct walt_task_struct *) prev->android_vendor_data1;
-	struct walt_rq *wrq = &per_cpu(walt_rq, cpu_of(rq));
 
 	if (unlikely(walt_disabled))
 		return;
 
 	wallclock = walt_rq_clock(rq);
-
-	/*
-	 * reset mvp arrival time as we are switching to non-CFS task
-	 * If rq is already in MVP throttling state then continue with
-	 * throttling until throttling time expires.
-	 */
-	if (!walt_fair_task(next))
-		wrq->mvp_arrival_time = 0;
 
 	if (likely(prev != next)) {
 		if (!prev->on_rq)
@@ -5155,7 +5194,6 @@ static void android_rvh_sched_fork_init(void *unused, struct task_struct *p)
 {
 	if (unlikely(walt_disabled))
 		return;
-
 	__sched_fork_init(p);
 }
 
@@ -5410,7 +5448,6 @@ static int walt_init_stop_handler(void *data)
 
 	for_each_possible_cpu(cpu) {
 		struct rq *rq = cpu_rq(cpu);
-
 
 		walt_sched_init_rq(rq);
 

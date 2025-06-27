@@ -297,6 +297,7 @@ static int pmic_spmi_probe(struct spmi_device *sdev)
 
 	devm_regmap_qti_debugfs_register(&sdev->dev, regmap);
 
+
 	return devm_of_platform_populate(&sdev->dev);
 }
 

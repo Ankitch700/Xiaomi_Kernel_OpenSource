@@ -93,13 +93,12 @@ static int __fwnode_link_add(struct fwnode_handle *con,
 	return 0;
 }
 
-int fwnode_link_add(struct fwnode_handle *con, struct fwnode_handle *sup,
-		    u8 flags)
+int fwnode_link_add(struct fwnode_handle *con, struct fwnode_handle *sup)
 {
 	int ret;
 
 	mutex_lock(&fwnode_link_lock);
-	ret = __fwnode_link_add(con, sup, flags);
+	ret = __fwnode_link_add(con, sup, 0);
 	mutex_unlock(&fwnode_link_lock);
 	return ret;
 }
@@ -1027,8 +1026,7 @@ static struct fwnode_handle *fwnode_links_check_suppliers(
 		return NULL;
 
 	list_for_each_entry(link, &fwnode->suppliers, c_hook)
-		if (!(link->flags &
-		      (FWLINK_FLAG_CYCLE | FWLINK_FLAG_IGNORE)))
+		if (!(link->flags & FWLINK_FLAG_CYCLE))
 			return link->supplier;
 
 	return NULL;
@@ -1978,9 +1976,6 @@ static bool __fw_devlink_relax_cycles(struct device *con,
 	}
 
 	list_for_each_entry(link, &sup_handle->suppliers, c_hook) {
-		if (link->flags & FWLINK_FLAG_IGNORE)
-			continue;
-
 		if (__fw_devlink_relax_cycles(con, link->supplier)) {
 			__fwnode_link_cycle(link);
 			ret = true;
@@ -2053,9 +2048,6 @@ static int fw_devlink_create_devlink(struct device *con,
 	struct device *sup_dev;
 	int ret = 0;
 	u32 flags;
-
-	if (link->flags & FWLINK_FLAG_IGNORE)
-		return 0;
 
 	if (con->fwnode == link->consumer)
 		flags = fw_devlink_get_flags(link->flags);

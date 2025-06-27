@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /* Copyright (c) 2013-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2024-2025 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #ifndef UFS_QCOM_H_
@@ -496,6 +496,7 @@ struct ufs_qcom_dev_params {
 	u32 desired_working_mode;
 };
 
+
 struct ufs_qcom_host {
 	/*
 	 * Set this capability if host controller supports the QUniPro mode
@@ -618,8 +619,7 @@ struct ufs_qcom_host {
 	bool ber_th_exceeded;
 	bool irq_affinity_support;
 	bool esi_enabled;
-	bool enforce_high_irq_cpus;
-	bool cap_hs_gear_limit;
+	bool storage_boost_en;
 
 	bool bypass_pbl_rst_wa;
 	atomic_t cqhp_update_pending;

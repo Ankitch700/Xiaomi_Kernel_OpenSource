@@ -120,7 +120,7 @@ enum EV_PRIORITY {
 #else
 #define GPI_DBG_LOG_SIZE (0) /* size must be power of 2 */
 #define DEFAULT_IPC_LOG_LVL (LOG_LVL_ERROR)
-#define CMD_TIMEOUT_MS (250)
+#define CMD_TIMEOUT_MS (500)
 /* verbose and register logging are disabled if !debug */
 #define GPII_REG(gpii, ch, fmt, ...)
 #define GPII_VERB(gpii, ch, fmt, ...)
@@ -1671,8 +1671,8 @@ static int gpi_send_cmd(struct gpii *gpii,
 			enum gpi_cmd gpi_cmd)
 {
 	u32 chid = MAX_CHANNELS_PER_GPII;
-	u32 cmd, state;
-	u32 irq_stat, offset, ch_irq;
+	u32 cmd;
+	u32 offset, irq_stat;
 	unsigned long timeout;
 	void __iomem *cmd_reg;
 
@@ -1700,26 +1700,10 @@ static int gpi_send_cmd(struct gpii *gpii,
 	if (!timeout) {
 		offset = GPI_GPII_n_CNTXT_TYPE_IRQ_OFFS(gpii->gpii_id);
 		irq_stat = gpi_read_reg(gpii, gpii->regs + offset);
-		state = gpi_read_ch_state(gpii_chan);
-		/* Fallback mechanism for verifying the state of the register */
-		if (irq_stat & GPI_GPII_n_CNTXT_TYPE_IRQ_MSK_CH_CTRL) {
-			offset = GPI_GPII_n_CNTXT_SRC_GPII_CH_IRQ_OFFS(gpii->gpii_id);
-			ch_irq = gpi_read_reg(gpii, gpii->regs + offset);
-			if (cmd != state) {
-				GPII_ERR(gpii, chid,
-					 "cmd: %s completion timeout ch_state=0x%x and irq_status=0x%x\n",
-					  TO_GPI_CMD_STR(gpi_cmd), state, irq_stat);
-				return -EIO;
-			}
-			/* Clear the channel interrupt status by writing the interrupt value */
-			offset = GPI_GPII_n_CNTXT_SRC_CH_IRQ_CLR_OFFS(gpii->gpii_id);
-			gpi_write_reg(gpii, gpii->regs + offset, (u32)ch_irq);
-		} else {
-			GPII_ERR(gpii, chid,
-				 "cmd: %s completion timeout ch_state=0x%x and irq_status=0x%x\n",
-				 TO_GPI_CMD_STR(gpi_cmd), state, irq_stat);
-			return -EIO;
-		}
+		GPII_ERR(gpii, chid,
+			 "cmd: %s completion timeout irq_status=0x%x\n",
+		TO_GPI_CMD_STR(gpi_cmd), irq_stat);
+		return -EIO;
 	}
 
 	/* confirm new ch state is correct , if the cmd is a state change cmd */
@@ -3298,6 +3282,9 @@ int gpi_q2spi_terminate_all(struct dma_chan *chan)
 				goto terminate_exit;
 			}
 		}
+	} else {
+		for (i = schid; i < echid; i++)
+			gpi_noop_tre(gpii_chan);
 	}
 
 	/* restart the channels */
@@ -3600,12 +3587,6 @@ struct dma_async_tx_descriptor *gpi_prep_slave_sg(struct dma_chan *chan,
 	/* copy each tre into transfer ring */
 	for_each_sg(sgl, sg, sg_len, i) {
 		tre = sg_virt(sg);
-
-		if (!tre) {
-			kfree(gpi_desc);
-			GPII_ERR(gpii, gpii_chan->chid, "TRE address is null\n");
-			return NULL;
-		}
 
 		if (sg_len == 1) {
 			tre_type =

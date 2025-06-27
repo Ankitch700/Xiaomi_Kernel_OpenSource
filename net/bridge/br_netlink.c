@@ -1905,10 +1905,7 @@ int __init br_netlink_init(void)
 {
 	int err;
 
-	err = br_vlan_rtnl_init();
-	if (err)
-		goto out;
-
+	br_vlan_rtnl_init();
 	rtnl_af_register(&br_af_ops);
 
 	err = rtnl_link_register(&br_link_ops);
@@ -1919,7 +1916,6 @@ int __init br_netlink_init(void)
 
 out_af:
 	rtnl_af_unregister(&br_af_ops);
-out:
 	return err;
 }
 

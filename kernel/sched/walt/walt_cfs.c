@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2020-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2025, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2024, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/seq_file.h>
@@ -12,6 +12,8 @@
 #include "trace.h"
 #include <../../../drivers/android/binder_internal.h>
 #include "../../../drivers/android/binder_trace.h"
+
+
 
 static void create_util_to_cost_pd(struct em_perf_domain *pd)
 {
@@ -187,6 +189,7 @@ static void walt_get_indicies(struct task_struct *p, int *order_index,
 		return;
 	}
 
+
 	if (is_full_throttle_boost()) {
 		*energy_eval_needed = false;
 		*order_index = num_sched_clusters - 1;
@@ -349,7 +352,7 @@ static void walt_find_best_target(struct sched_domain *sd,
 	 * For higher capacity worth I/O tasks, stop the search
 	 * at the end of higher capacity cluster(s).
 	 */
-	if (order_index > 0 && wts->iowaited) {
+	if (order_index > 0 && wts->iowaited && !sysctl_sched_storage_boost_disable) {
 		stop_index = num_sched_clusters - 2;
 		most_spare_wake_cap = LONG_MIN;
 	}
@@ -358,6 +361,7 @@ static void walt_find_best_target(struct sched_domain *sd,
 		stop_index = 0;
 		most_spare_wake_cap = LONG_MIN;
 	}
+
 
 	/* fast path for packing_cpu */
 	packing_cpu = walt_find_and_choose_cluster_packing_cpu(start_cpu, p);
@@ -530,6 +534,7 @@ retry:
 				if (spare_cap < target_max_spare_cap)
 					continue;
 			}
+
 
 			target_max_spare_cap = spare_cap;
 			target_nr_rtg_high_prio = walt_nr_rtg_high_prio(i);
@@ -933,8 +938,10 @@ int walt_find_energy_efficient_cpu(struct task_struct *p, int prev_cpu,
 		goto out;
 	}
 
+
 	walt_get_indicies(p, &order_index, &end_index, task_boost, uclamp_boost,
 								&energy_eval_needed);
+
 	start_cpu = cpumask_first(&cpu_array[order_index][0]);
 
 	is_rtg = task_in_related_thread_group(p);
@@ -984,6 +991,7 @@ int walt_find_energy_efficient_cpu(struct task_struct *p, int prev_cpu,
 		goto unlock;
 
 	first_cpu = cpumask_first(candidates);
+
 
 	if ((fbt_env.fastpath == CLUSTER_PACKING_FASTPATH) && !force_energy_eval) {
 		best_energy_cpu = first_cpu;
@@ -1092,6 +1100,7 @@ fail:
 	rcu_read_unlock();
 	return -1;
 }
+
 
 static void
 walt_select_task_rq_fair(void *unused, struct task_struct *p, int prev_cpu,
@@ -1405,6 +1414,7 @@ static void walt_cfs_check_preempt_wakeup(void *unused, struct rq *rq, struct ta
 	bool resched = false, skip_mvp;
 	bool p_is_mvp, curr_is_mvp;
 
+
 	if (unlikely(walt_disabled))
 		return;
 
@@ -1467,6 +1477,8 @@ static void walt_cfs_replace_next_task_fair(void *unused, struct rq *rq, struct 
 	struct task_struct *mvp;
 	struct cfs_rq *cfs_rq;
 
+
+
 	if (unlikely(walt_disabled))
 		return;
 
@@ -1497,10 +1509,8 @@ static void walt_cfs_replace_next_task_fair(void *unused, struct rq *rq, struct 
 	*repick = true;
 
 	/* Mark arrival of MVP task */
-	if (!wrq->mvp_arrival_time) {
-		update_rq_clock(rq);
+	if (!wrq->mvp_arrival_time)
 		wrq->mvp_arrival_time = rq->clock;
-	}
 
 	if (simple) {
 		for_each_sched_entity((*se)) {

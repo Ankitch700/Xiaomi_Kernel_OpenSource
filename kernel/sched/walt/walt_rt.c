@@ -9,6 +9,7 @@
 #include "walt.h"
 #include "trace.h"
 
+
 static DEFINE_PER_CPU(cpumask_var_t, walt_local_cpu_mask);
 DEFINE_PER_CPU(u64, rt_task_arrival_time) = 0;
 static bool long_running_rt_task_trace_rgstrd;
@@ -119,6 +120,7 @@ static void walt_rt_energy_aware_wake_cpu(struct task_struct *task, struct cpuma
 	if (soc_feat(SOC_ENABLE_SILVER_RT_SPREAD_BIT) && order_index == 0)
 		end_index = 1;
 
+
 	for (cluster = 0; cluster < num_sched_clusters; cluster++) {
 		for_each_cpu_and(cpu, lowest_mask, &cpu_array[order_index][cluster]) {
 			bool lt;
@@ -142,6 +144,7 @@ static void walt_rt_energy_aware_wake_cpu(struct task_struct *task, struct cpuma
 			lt = (walt_low_latency_task(cpu_rq(cpu)->curr) ||
 				walt_nr_rtg_high_prio(cpu));
 
+
 			/*
 			 * When the best is suitable and the current is not,
 			 * skip it
@@ -155,6 +158,7 @@ static void walt_rt_energy_aware_wake_cpu(struct task_struct *task, struct cpuma
 			 */
 			if (!(best_cpu_lt ^ lt) && (util > best_cpu_util))
 				continue;
+
 
 			/*
 			 * If the previous CPU has same load, keep it as
@@ -254,6 +258,7 @@ static void walt_select_task_rq_rt(void *unused, struct task_struct *task, int c
 	struct cpumask lowest_mask_reduced = { CPU_BITS_NONE };
 	struct walt_task_struct *wts;
 
+
 	if (unlikely(walt_disabled))
 		return;
 
@@ -278,6 +283,7 @@ static void walt_select_task_rq_rt(void *unused, struct task_struct *task, int c
 		*new_cpu = this_cpu;
 		goto out;
 	}
+
 
 	*new_cpu = cpu; /* previous CPU as back up */
 	rq = cpu_rq(cpu);
@@ -402,7 +408,6 @@ static void walt_rt_find_lowest_rq(void *unused, struct task_struct *task,
 		walt_rt_energy_aware_wake_cpu(task, &lowest_mask_reduced, ret, best_cpu);
 	if (*best_cpu == -1)
 		walt_rt_energy_aware_wake_cpu(task, lowest_mask, ret, best_cpu);
-
 	/*
 	 * Walt was not able to find a non-halted best cpu. Ensure that
 	 * find_lowest_rq doesn't use a halted cpu going forward, but

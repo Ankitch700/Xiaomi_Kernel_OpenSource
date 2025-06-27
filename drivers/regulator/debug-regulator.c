@@ -20,6 +20,7 @@
 #include <linux/regulator/machine.h>
 #include <linux/regulator/debug-regulator.h>
 
+
 #include <trace/events/power.h>
 
 #include "internal.h"
@@ -626,6 +627,7 @@ static void regulator_debug_print_enabled(struct regulator_dev *rdev)
 	else if (mode != -EPERM)
 		pr_info("%s[%u], mode=%d\n",
 			rdev_name(rdev), rdev->use_count, mode);
+
 	else
 		pr_info("%s[%u]\n", rdev_name(rdev), rdev->use_count);
 
@@ -640,11 +642,11 @@ static void regulator_debug_print_enabled(struct regulator_dev *rdev)
 		else
 			supply_name = "(null)-(null)";
 
-		pr_info("  %-32s %d   %8d %8d %8d\n", supply_name,
-			reg->enable_count,
-			reg->voltage[PM_SUSPEND_ON].min_uV,
-			reg->voltage[PM_SUSPEND_ON].max_uV,
-			reg->uA_load);
+			pr_info( "  %-32s %d   %8d %8d %8d\n", supply_name,
+				reg->enable_count,
+				reg->voltage[PM_SUSPEND_ON].min_uV,
+				reg->voltage[PM_SUSPEND_ON].max_uV,
+				reg->uA_load);
 	}
 }
 

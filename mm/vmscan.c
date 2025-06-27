@@ -5736,8 +5736,8 @@ static void lru_gen_shrink_node(struct pglist_data *pgdat, struct scan_control *
 
 	blk_finish_plug(&plug);
 done:
-	if (sc->nr_reclaimed > reclaimed)
-		pgdat->kswapd_failures = 0;
+	/* kswapd should never fail */
+	pgdat->kswapd_failures = 0;
 }
 
 /******************************************************************************

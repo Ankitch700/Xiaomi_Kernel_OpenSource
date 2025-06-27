@@ -27,6 +27,7 @@ struct xstats {
 	unsigned long gpu_minfreq;
 };
 
+
 struct devfreq_msm_adreno_tz_data {
 	struct notifier_block nb;
 	struct {

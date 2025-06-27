@@ -228,8 +228,8 @@ SYM_CODE_START(ret_from_fork)
 	jalr s0
 1:
 	move a0, sp /* pt_regs */
-	call syscall_exit_to_user_mode
-	j ret_from_exception
+	la ra, ret_from_exception
+	tail syscall_exit_to_user_mode
 SYM_CODE_END(ret_from_fork)
 
 /*

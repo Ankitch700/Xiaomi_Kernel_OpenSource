@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2024-2025, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2024, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include "qti_bcl_common.h"
@@ -110,7 +110,9 @@ static int bpm_stats_show(struct seq_file *s, void *data)
 	if (!bcl_perph->enable_bpm)
 		return 0;
 
+	mutex_lock(&bcl_perph->stats_lock);
 	get_bpm_stats(bcl_perph, &bcl_perph->bpm_stats);
+	mutex_unlock(&bcl_perph->stats_lock);
 
 	seq_printf(s, "Max Ibat\t: %d \tSynchronus Vbat\t: %d\n",
 		bcl_perph->bpm_stats.max_ibat, bcl_perph->bpm_stats.sync_vbat);

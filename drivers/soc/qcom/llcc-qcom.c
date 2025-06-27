@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0
 /*
  * Copyright (c) 2017-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2025 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2024, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/bitfield.h>
@@ -558,7 +558,7 @@ static const struct llcc_slice_config tuna7_data[] = {
 			0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
 	{LLCC_MDMHPGRW, 25, 1024, 5, 0, 0xFFFFFF,
 			0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
-	{LLCC_CMPT,     15, 4096, 1, 1, 0xFFFFFF,
+	{LLCC_CMPT,     34, 4096, 1, 1, 0xFFFFFF,
 			0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
 	{LLCC_GPUHTW,   11,  256, 1, 1, 0xFFFFFF,
 			0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
@@ -602,26 +602,26 @@ static const struct llcc_slice_config tuna7_data[] = {
 
 static const struct llcc_slice_config kera_data[] = {
 	{LLCC_CPUSS,     1,  896, 0, 0, 0xFFF, 0, 0, 0, 0, 0, 1,
-						1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0},
-	{LLCC_MDMHPFX,  24, 1024, 5, 1, 0xFFF, 0, 0, 0, 0, 0, 0,
+						1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+	{LLCC_MDMHPFX,  24, 1024, 3, 1, 0xFFF, 0, 0, 0, 0, 0, 0,
 						0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
-	{LLCC_VIDSC0,    2,  128, 5, 1, 0xFFF, 0, 0, 0, 0, 0, 0,
+	{LLCC_VIDSC0,    2,  128, 3, 1, 0xFFF, 0, 0, 0, 0, 0, 0,
 						0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
-	{LLCC_MDMHPGRW, 25, 1024, 5, 0, 0xFFF, 0, 0, 0, 0, 0, 0,
+	{LLCC_MDMHPGRW, 25, 1024, 3, 0, 0xFFF, 0, 0, 0, 0, 0, 0,
 						0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
 	{LLCC_GPUHTW,   11,  256, 1, 1, 0xFFF, 0, 0, 0, 0, 0, 0,
 						0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
-	{LLCC_GPU,       9,  896, 1, 0, 0xFFF, 0, 0, 0, 0, 0, 0,
+	{LLCC_GPU,       9,  640, 1, 0, 0xFFF, 0, 0, 0, 0, 0, 0,
 						0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
 	{LLCC_MMUHWT,   18,  256, 1, 1, 0xFFF, 0, 0, 0, 0, 0, 1,
 						0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
-	{LLCC_MDMPNG,   27,  256, 5, 1, 0xFFF, 0, 0, 0, 0, 0, 0,
+	{LLCC_MDMPNG,   27,  256, 3, 1, 0xFFF, 0, 0, 0, 0, 0, 0,
 						0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
 	{LLCC_MODPE,    29,  256, 1, 1, 0xF00, 0, 0, 0, 0, 0, 0,
 						0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0},
 	{LLCC_WRCACHE,  31,  256, 1, 1, 0xFFF, 0, 0, 0, 0, 0, 1,
 						0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
-	{LLCC_LCPDARE,  30,  128, 5, 1, 0xFFF, 0, 0, 0, 0, 0, 1,
+	{LLCC_LCPDARE,  30,  128, 3, 1, 0xFFF, 0, 0, 0, 0, 0, 1,
 						0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0},
 	{LLCC_ISLAND1,  12, 1280, 7, 1, 0, 0x3FF, 0, 0, 0, 0, 0,
 						0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
@@ -635,8 +635,8 @@ static const struct llcc_slice_config kera_data[] = {
 						0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 13},
 	{LLCC_CAMSRTRF, 21, 1024, 1, 1, 0xFFF, 0, 0, 0, 0, 0, 0,
 						0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 13},
-	{LLCC_CPUSSMPAM, 6, 512, 0, 1, 0xFFF, 0, 0, 0, 0, 0, 1,
-						1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+	{LLCC_CPUSSMPAM, 6, 1152, 1, 1, 0xFFF, 0, 0, 0, 0, 0, 1,
+						1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
 };
 
 static const struct llcc_slice_config x1e80100_data[] = {

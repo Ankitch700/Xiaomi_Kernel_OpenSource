@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2013-2022, Linux Foundation. All rights reserved.
- * Copyright (c) 2024-2025 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/acpi.h>
@@ -35,6 +35,7 @@
 #include <linux/nvmem-consumer.h>
 
 #include <soc/qcom/ice.h>
+
 
 #include <ufs/ufshcd.h>
 #include "ufshcd-pltfrm.h"
@@ -77,6 +78,9 @@
 
 /* Max number of log pages */
 #define UFS_QCOM_MAX_LOG_SZ	10
+
+
+
 #define ufs_qcom_log_str(host, fmt, ...)	\
 	do {	\
 		if (host->ufs_ipc_log_ctx && host->dbg_en)	\
@@ -206,6 +210,7 @@ static int ufs_qcom_ber_threshold_set(const char *val, const struct kernel_param
 static int ufs_qcom_ber_duration_set(const char *val, const struct kernel_param *kp);
 static void ufs_qcom_ber_mon_init(struct ufs_hba *hba);
 static void ufs_qcom_enable_vccq_proxy_vote(struct ufs_hba *hba);
+static void ufs_qcom_toggle_pri_affinity(struct ufs_hba *hba, bool on);
 
 static s64 idle_time[UFS_QCOM_BER_MODE_MAX];
 static ktime_t idle_start;
@@ -437,7 +442,7 @@ static inline void cancel_dwork_unvote_cpufreq(struct ufs_hba *hba)
 
 	cancel_delayed_work_sync(&host->fwork);
 #if IS_ENABLED(CONFIG_SCHED_WALT)
-	if (host->esi_mask.bits[0] && host->enforce_high_irq_cpus)
+	if (host->esi_mask.bits[0])
 		walt_unset_enforce_high_irq_cpus(&host->esi_mask);
 	sched_set_boost(STORAGE_BOOST_DISABLE);
 #endif
@@ -445,6 +450,8 @@ static inline void cancel_dwork_unvote_cpufreq(struct ufs_hba *hba)
 	if (!host->cur_freq_vote)
 		return;
 	atomic_set(&host->num_reqs_threshold, 0);
+	if (host->irq_affinity_support)
+		ufs_qcom_toggle_pri_affinity(hba, false);
 
 	for (i = 0; i < host->num_cpus; i++) {
 		err = ufs_qcom_mod_min_cpufreq(host->cpu_info[i].first_cpu,
@@ -466,8 +473,6 @@ static int ufs_qcom_get_pwr_dev_param(struct ufs_qcom_dev_params *qcom_param,
 	int min_dev_gear;
 	bool is_dev_sup_hs = false;
 	bool is_qcom_max_hs = false;
-	struct ufs_qcom_host *host =
-		container_of(qcom_param, struct ufs_qcom_host, host_pwr_cap);
 
 	if (dev_max->pwr_rx == FAST_MODE)
 		is_dev_sup_hs = true;
@@ -538,12 +543,6 @@ static int ufs_qcom_get_pwr_dev_param(struct ufs_qcom_dev_params *qcom_param,
 		agreed_pwr->gear_rx = agreed_pwr->gear_tx = min_dev_gear;
 	else
 		agreed_pwr->gear_rx = agreed_pwr->gear_tx = min_qcom_gear;
-
-	if (host->cap_hs_gear_limit && is_qcom_max_hs) {
-		dev_info(host->hba->dev, "Gear limit active: setting to UFS_HS_G1\n");
-		agreed_pwr->gear_rx = agreed_pwr->gear_tx =
-			min_qcom_gear = UFS_HS_G1;
-	}
 
 	agreed_pwr->hs_rate = qcom_param->hs_rate;
 	return 0;
@@ -1863,7 +1862,7 @@ static void ufs_qcom_set_esi_affinity_hint(struct ufs_hba *hba)
 		mask = get_cpu_mask(host->esi_affinity_mask[i]);
 		if (!cpumask_subset(mask, cpu_possible_mask)) {
 			dev_err(hba->dev, "Invalid esi-cpu affinity mask passed, using default\n");
-			mask = cpu_possible_mask;
+			mask = get_cpu_mask(UFS_QCOM_ESI_AFFINITY_MASK);
 		}
 
 		irq_modify_status(desc->irq, clear, set);
@@ -1895,16 +1894,15 @@ static void ufs_qcom_toggle_pri_affinity(struct ufs_hba *hba, bool on)
 #if IS_ENABLED(CONFIG_SCHED_WALT)
 	if (on) {
 		/*
-		 * Enforcing high IRQ CPUs is necessary for high I/O load
-		 * conditions. A single doorbell that doesn't use ESI doesn't
-		 * need this enforcement. Additionally, this enforcement is
-		 * only applied if storage boost is enabled.
+		 * Enforcing high irq cpus is needed for high IO load
+		 * condition, Single door bell which doesn't used
+		 * ESI doesn't need it.
 		 */
-		if (host->esi_mask.bits[0] && host->enforce_high_irq_cpus)
+		if (host->esi_mask.bits[0])
 			walt_set_enforce_high_irq_cpus(&host->esi_mask);
 		sched_set_boost(STORAGE_BOOST);
 	} else {
-		if (host->esi_mask.bits[0] && host->enforce_high_irq_cpus)
+		if (host->esi_mask.bits[0])
 			walt_unset_enforce_high_irq_cpus(&host->esi_mask);
 		sched_set_boost(STORAGE_BOOST_DISABLE);
 	}
@@ -2176,6 +2174,7 @@ static void ufs_qcom_enable_crash_on_err(struct ufs_hba *hba)
 
 static void ufs_qcom_dev_ref_clk_ctrl(struct ufs_qcom_host *host, bool enable)
 {
+
 	if (host->dev_ref_clk_ctrl_mmio &&
 	    (enable ^ host->is_dev_ref_clk_enabled)) {
 		u32 temp = readl_relaxed(host->dev_ref_clk_ctrl_mmio);
@@ -2269,6 +2268,7 @@ static int ufs_qcom_pwr_change_notify(struct ufs_hba *hba,
 
 	switch (status) {
 	case PRE_CHANGE:
+
 		ret = ufs_qcom_get_pwr_dev_param(&host->host_pwr_cap,
 						 dev_max_params, dev_req_params);
 		if (ret) {
@@ -2582,6 +2582,7 @@ static void ufs_qcom_advertise_quirks(struct ufs_hba *hba)
 {
 	struct ufs_qcom_host *host = ufshcd_get_variant(hba);
 
+
 	if (host->hw_ver.major == 0x01) {
 		hba->quirks |= UFSHCD_QUIRK_DELAY_BEFORE_DME_CMDS
 			    | UFSHCD_QUIRK_BROKEN_PA_RXHSUNTERMCAP
@@ -2606,6 +2607,7 @@ static void ufs_qcom_advertise_quirks(struct ufs_hba *hba)
 	if (host->disable_lpm || host->broken_ahit_wa)
 		hba->quirks |= UFSHCD_QUIRK_BROKEN_AUTO_HIBERN8;
 
+
 #if IS_ENABLED(CONFIG_SCSI_UFS_CRYPTO_QTI)
 	hba->android_quirks |= UFSHCD_ANDROID_QUIRK_CUSTOM_CRYPTO_PROFILE;
 #endif
@@ -2615,12 +2617,14 @@ static void ufs_qcom_set_caps(struct ufs_hba *hba)
 {
 	struct ufs_qcom_host *host = ufshcd_get_variant(hba);
 
+
 	if (!host->disable_lpm) {
 		hba->caps |= UFSHCD_CAP_CLK_GATING |
 			UFSHCD_CAP_HIBERN8_WITH_CLK_GATING |
 			UFSHCD_CAP_CLK_SCALING |
 			UFSHCD_CAP_AUTO_BKOPS_SUSPEND |
 			UFSHCD_CAP_AGGR_POWER_COLLAPSE |
+			UFSHCD_CAP_RPM_AUTOSUSPEND |
 			UFSHCD_CAP_WB_WITH_CLK_SCALING;
 		if (!host->disable_wb_support)
 			hba->caps |= UFSHCD_CAP_WB_EN;
@@ -2647,6 +2651,8 @@ static void ufs_qcom_set_caps(struct ufs_hba *hba)
 
 	if (host->hw_ver.major >= 0x5)
 		host->caps |= UFS_QCOM_CAP_SHARED_ICE;
+
+
 }
 
 static int ufs_qcom_unvote_qos_all(struct ufs_hba *hba)
@@ -3136,7 +3142,7 @@ static void ufs_qcom_qos_init(struct ufs_hba *hba)
 			qcg->mask.bits[0] = host->qos_perf_mask.bits[0];
 		} else {
 			qcg->mask.bits[0] = host->qos_non_perf_mask.bits[0];
-			if (host->enforce_high_irq_cpus)
+			if (host->storage_boost_en)
 				qcg->perf_core = true;
 		}
 
@@ -3238,12 +3244,12 @@ static int ufs_qcom_first_partial_cpu(struct ufs_qcom_host *host)
  */
 static void ufs_qcom_update_esi_affinity_mask(struct ufs_qcom_host *host, int num_cqs)
 {
-	cpumask_t localclustermask[MAX_NUM_CLUSTERS];
 	int cid = -1;
 	int  first_hole_index = -1;
 	int i, j, pos = 0;
 	int last_cpu = -1;
 	int qultivate_cid = -1;
+	cpumask_t localclustermask[3];
 	u32 cpu;
 
 	first_hole_index = ufs_qcom_first_partial_cpu(host);
@@ -3406,8 +3412,6 @@ static void ufs_qcom_parse_irq_affinity(struct ufs_hba *hba)
 		if (ufs_qcom_partial_cpu_found(host))
 			ufs_qcom_update_esi_affinity_mask(host, num_cqs);
 
-		/* Ensure the esi-mask only includes possible CPUs. */
-		cpumask_and(&host->esi_mask, &host->esi_mask, cpu_possible_mask);
 	}
 }
 
@@ -3502,8 +3506,8 @@ static int ufs_qcom_set_cur_therm_state(struct thermal_cooling_device *tcd,
 		/* Stop setting hi-pri to requests and set irq affinity to default value */
 		atomic_set(&host->therm_mitigation, 1);
 		cancel_dwork_unvote_cpufreq(hba);
-		if (host->irq_affinity_support)
-			ufs_qcom_toggle_pri_affinity(hba, false);
+		//if (host->irq_affinity_support)
+		//	ufs_qcom_toggle_pri_affinity(hba, false);
 
 		/* Set the default auto-hiberate idle timer to 1 ms */
 		ufshcd_auto_hibern8_update(hba, ufs_qcom_us_to_ahit(1000));
@@ -3858,7 +3862,7 @@ static void ufs_qcom_parse_storage_boost_flag(struct ufs_qcom_host *host)
 	if (!np)
 		return;
 
-	host->enforce_high_irq_cpus = of_property_read_bool(np, "qcom,enforce-high-irq-cpus");
+	host->storage_boost_en = of_property_read_bool(np, "qcom,storage-boost");
 }
 
 /*
@@ -5105,6 +5109,8 @@ static void ufs_qcom_parse_limits(struct ufs_qcom_host *host)
 {
 	struct ufs_qcom_dev_params *host_pwr_cap = &host->host_pwr_cap;
 	struct device_node *np = host->hba->dev->of_node;
+
+
 	u32 dev_major = 0, dev_minor = 0;
 	u32 val;
 	u32 ufs_dev_types = 0;
@@ -5198,6 +5204,7 @@ static void ufs_qcom_parse_lpm(struct ufs_qcom_host *host)
 	struct device_node *node = host->hba->dev->of_node;
 
 	host->disable_lpm = of_property_read_bool(node, "qcom,disable-lpm");
+
 	if (host->disable_lpm)
 		dev_info(host->hba->dev, "(%s) All LPM is disabled\n",
 			 __func__);
@@ -5933,34 +5940,6 @@ static ssize_t boost_monitor_timer_ms_show(struct device *dev,
 
 static DEVICE_ATTR_RW(boost_monitor_timer_ms);
 
-static ssize_t cap_hs_gear_limit_show(struct device *dev,
-		struct device_attribute *attr, char *buf)
-{
-	struct ufs_hba *hba = dev_get_drvdata(dev);
-	struct ufs_qcom_host *host = ufshcd_get_variant(hba);
-
-	return scnprintf(buf, PAGE_SIZE, "%d\n", !!host->cap_hs_gear_limit);
-}
-
-static ssize_t cap_hs_gear_limit_store(struct device *dev,
-		struct device_attribute *attr, const char *buf, size_t count)
-{
-	struct ufs_hba *hba = dev_get_drvdata(dev);
-	struct ufs_qcom_host *host = ufshcd_get_variant(hba);
-	bool value;
-
-	if (!capable(CAP_SYS_ADMIN))
-		return -EACCES;
-
-	if (kstrtobool(buf, &value))
-		return -EINVAL;
-
-	host->cap_hs_gear_limit = !!value;
-	return count;
-}
-
-static DEVICE_ATTR_RW(cap_hs_gear_limit);
-
 static struct attribute *ufs_qcom_sysfs_attrs[] = {
 	&dev_attr_err_state.attr,
 	&dev_attr_power_mode.attr,
@@ -5975,7 +5954,6 @@ static struct attribute *ufs_qcom_sysfs_attrs[] = {
 	&dev_attr_boost_min_threshold.attr,
 	&dev_attr_boost_max_threshold.attr,
 	&dev_attr_boost_monitor_timer_ms.attr,
-	&dev_attr_cap_hs_gear_limit.attr,
 	NULL
 };
 
@@ -6074,6 +6052,7 @@ static void ufs_qcom_hook_compl_command(void *param, struct ufs_hba *hba,
 	if (lrbp && lrbp->cmd) {
 		struct request *rq = scsi_cmd_to_rq(lrbp->cmd);
 		int sz = rq ? blk_rq_sectors(rq) : 0;
+
 
 		if (!is_mcq_enabled(hba)) {
 			ufs_qcom_log_str(host, ">,%x,%d,%x,%d\n",

@@ -87,8 +87,9 @@ void remove_heavy(struct walt_task_struct *wts)
 		return;
 
 	raw_spin_lock_irqsave(&heavy_lock, flags);
-	if (!(wts->low_latency & WALT_LOW_LATENCY_HEAVY_BIT))
-		goto out;
+    if (!(wts->low_latency & WALT_LOW_LATENCY_HEAVY_BIT))
+            goto out;
+
 
 	for (i = 0; i < MAX_NR_PIPELINE; i++) {
 		if (wts == heavy_wts[i]) {
@@ -381,12 +382,8 @@ bool find_heaviest_topapp(u64 window_start)
 
 	}
 
-	/*
-	 * Under single-thread pipeline scenario, it is possible that not all
-	 * heavy tasks have WALT_LOW_LATENCY_HEAVY_BIT bit.  Ensure that all
-	 * the heavy tasks have WALT_LOW_LATENCY_HEAVY_BIT set.
-	 */
 	for (i = 0; i < MAX_NR_PIPELINE; i++) {
+		/* update pipeline low_latency for heavy tasks */
 		if (heavy_wts[i])
 			heavy_wts[i]->low_latency |= WALT_LOW_LATENCY_HEAVY_BIT;
 	}

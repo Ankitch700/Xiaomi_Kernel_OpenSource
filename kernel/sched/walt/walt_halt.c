@@ -22,6 +22,7 @@ enum pause_type {
 struct cpumask __cpu_halt_mask;
 struct cpumask __cpu_partial_halt_mask;
 
+
 /* spin lock to allow calling from non-preemptible context */
 static DEFINE_RAW_SPINLOCK(halt_lock);
 
@@ -500,6 +501,9 @@ bool cpus_halted_by_client(struct cpumask *cpus, enum pause_client client)
 {
 	struct halt_cpu_state *halt_cpu_state;
 	int cpu;
+
+	if (sysctl_disable_minfreq_pause && client == PAUSE_THERMAL)
+		return false;
 
 	for_each_cpu(cpu, cpus) {
 		halt_cpu_state = per_cpu_ptr(&halt_state, cpu);

@@ -9,6 +9,7 @@
 #include "walt.h"
 #include "trace.h"
 
+
 inline unsigned long walt_lb_cpu_util(int cpu)
 {
 	struct walt_rq *wrq = &per_cpu(walt_rq, cpu);
@@ -1246,6 +1247,7 @@ void walt_lb_init(void)
 	register_trace_android_rvh_find_busiest_queue(walt_find_busiest_queue, NULL);
 	register_trace_android_rvh_sched_newidle_balance(walt_sched_newidle_balance, NULL);
 	register_trace_android_rvh_find_new_ilb(walt_find_new_ilb, NULL);
+
 
 	for_each_cpu(cpu, cpu_possible_mask) {
 		call_single_data_t *csd;

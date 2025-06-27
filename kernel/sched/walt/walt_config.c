@@ -198,7 +198,7 @@ void walt_config(void)
 				&pipeline_sync_cpus, &cpu_array[0][3]);
 		}
 
-	} else if (!strcmp(name, "TUNA") || !strcmp(name, "TUNA7")) {
+	} else if (!strcmp(name, "TUNA")) {
 		soc_feat_set(SOC_ENABLE_SILVER_RT_SPREAD_BIT);
 		soc_feat_set(SOC_ENABLE_BOOST_TO_NEXT_CLUSTER_BIT);
 		soc_feat_set(SOC_ENABLE_FORCE_SPECIAL_PIPELINE_PINNING);
@@ -215,6 +215,22 @@ void walt_config(void)
 			cpumask_or(&pipeline_sync_cpus,
 				&pipeline_sync_cpus, &cpu_array[0][3]);
 		}
+		/*
+		 * Trailblazer settings
+		 */
+		trailblazer_floor_freq[0] = 1000000;
+		trailblazer_floor_freq[1] = 1000000;
+		trailblazer_floor_freq[2] = 1000000;
+		debugfs_walt_features |= WALT_FEAT_TRAILBLAZER_BIT;
+		soc_feat_unset(SOC_ENABLE_THERMAL_HALT_LOW_FREQ_BIT);
+
+	} else if (!strcmp(name, "KERA")) {
+		/*
+		 * Trailblazer settings
+		 */
+		trailblazer_floor_freq[0] = 1000000;
+		trailblazer_floor_freq[1] = 1000000;
+		debugfs_walt_features |= WALT_FEAT_TRAILBLAZER_BIT;
 
 		/*
 		 * Trailblazer settings
@@ -224,26 +240,13 @@ void walt_config(void)
 		trailblazer_floor_freq[2] = 1000000;
 		debugfs_walt_features |= WALT_FEAT_TRAILBLAZER_BIT;
 
-		/*
-		 * Do not put the whole cluster at Fmin during thermal halt condition.
-		 */
-		soc_feat_unset(SOC_ENABLE_THERMAL_HALT_LOW_FREQ_BIT);
-
-		sysctl_sched_suppress_region2 = 1;
-
 	} else if (!strcmp(name, "KERA")) {
-		soc_sched_lib_name_capacity = 3;
 		/*
 		 * Trailblazer settings
 		 */
 		trailblazer_floor_freq[0] = 1000000;
 		trailblazer_floor_freq[1] = 1000000;
 		debugfs_walt_features |= WALT_FEAT_TRAILBLAZER_BIT;
-
-		/*
-		 * Do not put the whole cluster at Fmin during thermal halt condition.
-		 */
-		soc_feat_unset(SOC_ENABLE_THERMAL_HALT_LOW_FREQ_BIT);
 
 	}
 }

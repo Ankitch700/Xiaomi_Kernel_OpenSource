@@ -9649,12 +9649,11 @@ lpfc_els_flush_cmd(struct lpfc_vport *vport)
 		if (piocb->cmd_flag & LPFC_DRIVER_ABORTED && !mbx_tmo_err)
 			continue;
 
-		/* On the ELS ring we can have ELS_REQUESTs, ELS_RSPs,
-		 * or GEN_REQUESTs waiting for a CQE response.
+		/* On the ELS ring we can have ELS_REQUESTs or
+		 * GEN_REQUESTs waiting for a response.
 		 */
 		ulp_command = get_job_cmnd(phba, piocb);
-		if (ulp_command == CMD_ELS_REQUEST64_WQE ||
-		    ulp_command == CMD_XMIT_ELS_RSP64_WQE) {
+		if (ulp_command == CMD_ELS_REQUEST64_CR) {
 			list_add_tail(&piocb->dlist, &abort_list);
 
 			/* If the link is down when flushing ELS commands

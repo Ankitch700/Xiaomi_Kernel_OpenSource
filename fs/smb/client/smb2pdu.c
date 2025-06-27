@@ -1263,12 +1263,6 @@ SMB2_negotiate(const unsigned int xid,
 		else
 			cifs_server_dbg(VFS, "Missing expected negotiate contexts\n");
 	}
-
-	if (server->cipher_type && !rc) {
-		rc = smb3_crypto_aead_allocate(server);
-		if (rc)
-			cifs_server_dbg(VFS, "%s: crypto alloc failed, rc=%d\n", __func__, rc);
-	}
 neg_exit:
 	free_rsp_buf(resp_buftype, rsp);
 	return rc;
@@ -4205,6 +4199,8 @@ void smb2_reconnect_server(struct work_struct *work)
 	}
 
 	tcon->status = TID_GOOD;
+	tcon->reconn_for_idle = 0;
+	tcon->reconn_for_open = 0;
 	tcon->retry = false;
 	tcon->need_reconnect = false;
 

@@ -104,6 +104,8 @@ unsigned int sysctl_legacy_freq_levels_cluster1[LEGACY_SMART_FREQ*2];
 unsigned int sysctl_legacy_freq_levels_cluster2[LEGACY_SMART_FREQ*2];
 unsigned int sysctl_legacy_freq_levels_cluster3[LEGACY_SMART_FREQ*2];
 unsigned int sysctl_sched_walt_core_util[WALT_NR_CPUS];
+unsigned int sysctl_disable_minfreq_pause;
+unsigned int sysctl_sched_storage_boost_disable;
 unsigned int sysctl_pipeline_busy_boost_pct;
 unsigned int sysctl_sched_lrpb_active_ms[NUM_PIPELINE_BUSY_THRES];
 unsigned int sysctl_cluster01_load_sync[NUM_LOAD_SYNC_SETTINGS];
@@ -1047,10 +1049,15 @@ static int sched_sibling_cluster_handler(struct ctl_table *table, int write,
 				       loff_t *ppos)
 {
 	int ret = -EACCES, i = 0;
+	static bool initialized;
 	struct walt_sched_cluster *cluster;
+
+	if (write && initialized)
+		return ret;
 
 	ret = proc_dointvec_minmax(table, write, buffer, lenp, ppos);
 	if (!ret && write) {
+		initialized = true;
 		for_each_sched_cluster(cluster)
 			cluster->sibling_cluster = sysctl_sched_sibling_cluster_map[i++];
 	}
@@ -1925,6 +1932,15 @@ static struct ctl_table walt_table[] = {
 		.extra2		= SYSCTL_INT_MAX,
 	},
 	{
+		.procname	= "sched_disable_minfreq_pause",
+		.data		= &sysctl_disable_minfreq_pause,
+		.maxlen		= sizeof(unsigned int),
+		.mode		= 0664,
+		.proc_handler	= proc_dointvec_minmax,
+		.extra1		= SYSCTL_ZERO,
+		.extra2		= SYSCTL_INT_MAX,
+	},
+	{
 		.procname	= "sched_pipeline_busy_boost_pct",
 		.data		= &sysctl_pipeline_busy_boost_pct,
 		.maxlen		= sizeof(unsigned int),
@@ -1939,6 +1955,15 @@ static struct ctl_table walt_table[] = {
 		.maxlen		= sizeof(unsigned int) * NUM_PIPELINE_BUSY_THRES,
 		.mode		= 0644,
 		.proc_handler	= proc_dointvec_minmax,
+		.extra1		= SYSCTL_ZERO,
+		.extra2		= SYSCTL_INT_MAX,
+	},
+	{
+		.procname	= "sched_storage_boost_disable",
+		.data		= &sysctl_sched_storage_boost_disable,
+		.maxlen		= sizeof(unsigned int),
+		.mode		= 0644,
+		.proc_handler	= proc_douintvec_minmax,
 		.extra1		= SYSCTL_ZERO,
 		.extra2		= SYSCTL_INT_MAX,
 	},

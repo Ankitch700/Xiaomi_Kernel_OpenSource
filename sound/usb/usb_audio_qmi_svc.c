@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2025, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2024, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/module.h>
@@ -35,6 +35,7 @@
 #include "pcm.h"
 #include "power.h"
 #include "usb_audio_qmi_v01.h"
+#include "../../drivers/misc/hwid/hwid.h"
 
 #define BUS_INTERVAL_FULL_SPEED 1000 /* in us */
 #define BUS_INTERVAL_HIGHSPEED_AND_ABOVE 125 /* in us */
@@ -960,7 +961,9 @@ static void uaudio_dev_cleanup(struct uaudio_dev *dev)
 static void uaudio_connect(struct snd_usb_audio *chip)
 {
 	struct xhci_sideband *sb;
-
+	static uint32_t platform_id = HARDWARE_PROJECT_UNKNOWN;
+	if(platform_id == HARDWARE_PROJECT_UNKNOWN)
+		platform_id = get_hw_version_platform();
 	if (chip->card->number >= SNDRV_CARDS) {
 		uaudio_err("Invalid card number\n");
 		return;
@@ -972,6 +975,12 @@ static void uaudio_connect(struct snd_usb_audio *chip)
 
 	uadev[chip->card->number].chip = chip;
 	uadev[chip->card->number].sb = sb;
+	uadev[chip->card->number].chip->quirk_flags |= QUIRK_FLAG_CTL_MSG_DELAY_1M;
+	if (platform_id == HARDWARE_PROJECT_O8)
+		{
+			uadev[chip->card->number].chip->quirk_flags |= QUIRK_FLAG_CTL_MSG_DELAY_5M;
+			//uaudio_info("O8_WA for hang headset!");
+		}
 }
 
 static void uaudio_disconnect(struct snd_usb_audio *chip)
@@ -1266,6 +1275,7 @@ static int enable_audio_stream(struct snd_usb_substream *subs,
 	if (atomic_read(&chip->shutdown)) {
 		uaudio_err("chip already shutdown\n");
 		ret = -ENODEV;
+		return ret;
 	} else {
 		ret = snd_usb_lock_shutdown(chip);
 		if (ret < 0)
@@ -1431,7 +1441,6 @@ static void handle_uaudio_stream_req(struct qmi_handle *handle,
 		mutex_lock(&chip->mutex);
 		atomic_inc(&uadev[pcm_card_num].in_use);
 		mutex_unlock(&chip->mutex);
-
 		ret = enable_audio_stream(subs,
 				map_pcm_format(req_msg->audio_format),
 				req_msg->number_of_ch, req_msg->bit_rate,
@@ -1439,12 +1448,9 @@ static void handle_uaudio_stream_req(struct qmi_handle *handle,
 		if (!ret)
 			ret = prepare_qmi_response(subs, req_msg, &resp,
 					info_idx);
-		else
-			uaudio_dbg("enable_audio_stream failed %d\n", ret);
-
 		if (ret) {
 			mutex_lock(&chip->mutex);
-			uaudio_dbg("enable process failed %d\n", ret);
+			uaudio_dbg("failed to prepare qmi response %d", ret);
 			atomic_dec(&uadev[pcm_card_num].in_use);
 			mutex_unlock(&chip->mutex);
 		}

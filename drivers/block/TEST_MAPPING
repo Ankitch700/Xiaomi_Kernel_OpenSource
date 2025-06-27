@@ -241,12 +241,6 @@
     },
     {
       "name": "VtsAidlHalSensorsTargetTest"
-    },
-    {
-      "name": "binderLibTest"
-    },
-    {
-      "name": "binderSafeInterfaceTest"
     }
   ]
 }

@@ -152,8 +152,7 @@ static ssize_t bus_attr_show(struct kobject *kobj, struct attribute *attr,
 {
 	struct bus_attribute *bus_attr = to_bus_attr(attr);
 	struct subsys_private *subsys_priv = to_subsys_private(kobj);
-	/* return -EIO for reading a bus attribute without show() */
-	ssize_t ret = -EIO;
+	ssize_t ret = 0;
 
 	if (bus_attr->show)
 		ret = bus_attr->show(subsys_priv->bus, buf);
@@ -165,8 +164,7 @@ static ssize_t bus_attr_store(struct kobject *kobj, struct attribute *attr,
 {
 	struct bus_attribute *bus_attr = to_bus_attr(attr);
 	struct subsys_private *subsys_priv = to_subsys_private(kobj);
-	/* return -EIO for writing a bus attribute without store() */
-	ssize_t ret = -EIO;
+	ssize_t ret = 0;
 
 	if (bus_attr->store)
 		ret = bus_attr->store(subsys_priv->bus, buf, count);
@@ -922,8 +920,6 @@ bus_devices_fail:
 	bus_remove_file(bus, &bus_attr_uevent);
 bus_uevent_fail:
 	kset_unregister(&priv->subsys);
-	/* Above kset_unregister() will kfree @priv */
-	priv = NULL;
 out:
 	kfree(priv);
 	return retval;

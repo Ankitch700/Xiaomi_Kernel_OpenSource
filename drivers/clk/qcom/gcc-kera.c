@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2024-2025, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2024, Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/clk.h>
@@ -573,7 +573,8 @@ static struct clk_rcg2 gcc_pcie_0_aux_clk_src = {
 };
 
 static const struct freq_tbl ftbl_gcc_pcie_0_phy_rchng_clk_src[] = {
-	F(100000000, P_GCC_GPLL0_OUT_EVEN, 3, 0, 0),
+	F(19200000, P_BI_TCXO, 1, 0, 0),
+	F(100000000, P_GCC_GPLL0_OUT_MAIN, 6, 0, 0),
 	{ }
 };
 
@@ -596,7 +597,8 @@ static struct clk_rcg2 gcc_pcie_0_phy_rchng_clk_src = {
 		.vdd_class = &vdd_cx,
 		.num_rate_max = VDD_NUM,
 		.rate_max = (unsigned long[VDD_NUM]) {
-			[VDD_LOWER] = 100000000},
+			[VDD_LOWER] = 19200000,
+			[VDD_LOW] = 100000000},
 	},
 };
 
@@ -643,7 +645,8 @@ static struct clk_rcg2 gcc_pcie_1_phy_rchng_clk_src = {
 		.vdd_class = &vdd_cx,
 		.num_rate_max = VDD_NUM,
 		.rate_max = (unsigned long[VDD_NUM]) {
-			[VDD_LOWER] = 100000000},
+			[VDD_LOWER] = 19200000,
+			[VDD_LOW] = 100000000},
 	},
 };
 
