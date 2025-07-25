@@ -1,0 +1,48 @@
+name: Build Kernel for Redmi Note 12 4G (tapas)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Kernel Source
+        uses: actions/checkout@v3
+
+      - name: Setup Environment
+        run: |
+          sudo apt update
+          sudo apt install -y bc bison flex libssl-dev make libc6-dev libncurses5-dev curl git wget python3 unzip
+
+      - name: Download Clang Toolchain (Clang 17)
+        run: |
+          mkdir clang
+          wget https://github.com/ClangBuiltLinux/clang-llvm/releases/download/llvmorg-17.0.6/clang+llvm-17.0.6-aarch64-linux-gnu.tar.xz
+          tar -xf clang+llvm-17.0.6-aarch64-linux-gnu.tar.xz -C clang --strip-components=1
+
+      - name: Configure Kernel
+        run: |
+          export PATH=$(pwd)/clang/bin:$PATH
+          export ARCH=arm64
+          export SUBARCH=arm64
+          make O=out tapas_defconfig
+
+      - name: Build Kernel
+        run: |
+          export PATH=$(pwd)/clang/bin:$PATH
+          export ARCH=arm64
+          export SUBARCH=arm64
+          make -j$(nproc) O=out \
+            CC=clang \
+            CROSS_COMPILE=aarch64-linux-gnu- \
+            CLANG_TRIPLE=aarch64-linux-gnu- \
+            LLVM=1 LLVM_IAS=1
+
+      - name: Upload Output Image
+        uses: actions/upload-artifact@v4
+        with:
+          name: Kernel Image
+          path: |
+            out/arch/arm64/boot/Image.gz-dtb
